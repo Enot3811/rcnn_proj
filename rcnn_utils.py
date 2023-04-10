@@ -15,43 +15,46 @@ from matplotlib import patches
 def draw_bounding_boxes(
     ax: plt.Axes,
     bboxes: torch.Tensor,
-    labels: torch.Tensor,
-    index2name: Dict[int, str] = None
+    labels: Optional[torch.Tensor] = None,
+    index2name: Optional[Dict[int, str]] = None,
+    line_width: Optional[int] = 2
 ) -> plt.Axes:
     """
-    Show bounding boxes and corresponding labels on given Axes.
+    Show bounding boxes and corresponding labels on a given Axes.
 
     Parameters
     ----------
     ax : plt.Axes
-        Axes with sample image.
+        Axes with a sample image.
     bboxes : torch.Tensor
-        Bounding boxes.
-    labels : torch.Tensor
-        Labels that correspond bounding boxes.
-    index2name : Dict[int, str], optional
-        Converter from int labels to names, by default None
+        A tensor with shape `[N_bboxes, 4]` that contains the bounding boxes.
+    labels : Optional[torch.Tensor]
+        Labels that correspond the bounding boxes.
+    index2name : Optional[Dict[int, str]]
+        A converter dict from int labels to names.
+    line_width : Optional[int]
+        A width of bounding boxes' lines
 
     Returns
     -------
     plt.Axes
-        Given axis with added bounding boxes.
+        The given axis with added bounding boxes.
     """
+    if labels is None:
+        labels = torch.tensor([-1] * len(bboxes))
     for bbox, label in zip(bboxes, labels):
         label = label.item()
         if index2name is not None:
             label = index2name[label]
-        if label == 'pad':
-            continue
-
         xmin, ymin, xmax, ymax = bbox.numpy()
         rect = patches.Rectangle(
-            (xmin, ymin), xmax - xmin, ymax - ymin, linewidth=2, edgecolor='y',
-            facecolor='none')
+            (xmin, ymin), xmax - xmin, ymax - ymin, linewidth=line_width,
+            edgecolor='y', facecolor='none')
         ax.add_patch(rect)
 
-        ax.text(xmin + 5, ymin + 20, label,
-                bbox=dict(facecolor='yellow', alpha=0.5))
+        if label != 'pad' and label != -1:
+            ax.text(xmin + 5, ymin + 20, label,
+                    bbox=dict(facecolor='yellow', alpha=0.5))
     return ax
 
 
