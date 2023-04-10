@@ -189,3 +189,48 @@ def generate_anchor_boxes(
         map_size
     ).reshape(orig_shape)
     return anc_base
+
+
+def project_bboxes(
+    bboxes: torch.Tensor,
+    width_scale_factor: float,
+    height_scale_factor: float,
+    mode='a2p'
+) -> torch.Tensor:
+    """
+    Project bounding boxes to a defined scaled space.
+
+    Args:
+        bboxes (torch.Tensor): A tensor with shape
+        `[B_size, Hmap, Wmap, n_anchor_boxes, 4]` that contains bounding
+        boxes.
+        width_scale_factor (float): A scale factor across a width.
+        height_scale_factor (float): A scale factor across a height.
+        mode (str, optional): A mode of projection. It can be `a2p` or `p2a`
+        that correspond to an activation map to a pixel image projection and
+        a pixel image to activation map.
+
+    Raises:
+        ValueError: The mode must be either a2p or p2a
+
+    Returns:
+        torch.Tensor: The projected bounding boxes with shape
+        `[B_size, Hmap, Wmap, n_anchor_boxes, 4]`.
+    """
+    if mode not in ('a2p', 'p2a'):
+        raise ValueError(
+            f'The mode must be either a2p or p2a, but given mode is {mode}')
+    batch_size = bboxes.shape[0]
+    proj_bboxes = bboxes.clone().reshape(batch_size, -1, 4)
+    pad_bbox_mask = (proj_bboxes == -1)  # indicating padded bboxes
+
+    if mode == 'a2p':
+        proj_bboxes[:, :, [0, 2]] *= width_scale_factor
+        proj_bboxes[:, :, [1, 3]] *= height_scale_factor
+    elif mode == 'p2a':
+        proj_bboxes[:, :, [0, 2]] /= width_scale_factor
+        proj_bboxes[:, :, [1, 3]] /= height_scale_factor
+
+    proj_bboxes[pad_bbox_mask] = -1
+    proj_bboxes = proj_bboxes.reshape(bboxes.shape)
+    return proj_bboxes
