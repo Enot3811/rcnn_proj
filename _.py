@@ -11,6 +11,42 @@ from object_detection_dataset import ObjectDetectionDataset
 import _utils
 
 
+def get_required_anchors(
+    anc_boxes_all: torch.Tensor,
+    gt_boxes: torch.Tensor,
+    pos_thresh: float = 0.7,
+    neg_thresh: float = 0.2
+):
+    iou = rcnn_utils.anc_gt_iou(anc_boxes_all, gt_boxes)
+    max_iou, indexes = iou.max(dim=1)
+
+    indexes[max_iou == 0.0] = -1
+
+
+    # нужно из anc_boxes_all с размерами (n_boxes, 4) взять только те, которые
+    # в indexes с размером (b, max_gt)
+    # То есть max_gt боксов для каждой из b картинок
+    # Проблемы сейчас 2
+    # 1) Индексы не подойдут, так как в некоторых из них 0 из-за нулевого iou
+    # их надо как-то обойти. Предположительно с помощью маски с размером n_boxes
+    # 2) Как-то обойти b_size. Желательно не с помощью цикла. Разные маски для разных картинок
+    b_size = gt_boxes.size(0)
+    mask = torch.zeros(*anc_boxes_all.shape, dtype=torch.bool)
+
+    # 
+    mask[indexes[1]] = True
+
+    # те индексы, которые нужны
+    indexes_mask = iou[1, indexes[1], torch.arange(6)] > pos_thresh
+
+    torch.tensor([torch.arange(b_size), []])
+
+    for i in range(b_size):
+        mask[i]
+
+
+
+
 path = Path('/home/pc0/projects/RCNN_proj/rcnn_proj')
 
 annotation_path = path.joinpath('data/annotations.xml')
@@ -29,6 +65,7 @@ backbone = torch.nn.Sequential(*list(resnet.children())[:8])
 
 dloader = DataLoader(dset, batch_size=2)
 sample = next(iter(dloader))
+image, gt_boxes, classes = sample
 
 backbone_out = backbone(sample[0])
 b, out_c, out_h, out_w = backbone_out.shape
@@ -42,19 +79,14 @@ projected_y_anchors = y_anchors * height_scale_factor
 
 anc_scales = [2, 4, 6]
 anc_ratios = [0.5, 1, 1.5]
-anc_base = rcnn_utils.generate_anchor_boxes(
+anc_bboxes = rcnn_utils.generate_anchor_boxes(
     x_anchors, y_anchors, anc_scales, anc_ratios, (out_h, out_w))
-dset_anc_bboxes = anc_base.repeat(len(dset), 1, 1, 1, 1)
-
-fig, axes = plt.subplots(1, 2, figsize=(16, 8))
-image_utils.display_image(dset[0][0], axes[0])
-image_utils.display_image(dset[1][0], axes[1])
-rcnn_utils.show_anchors(projected_x_anchors, y_anchors, axes[0])
-rcnn_utils.show_anchors(projected_x_anchors, y_anchors, axes[1])
+dset_anc_bboxes = anc_bboxes.repeat(len(dset), 1, 1, 1, 1)
 
 projected_bboxes = rcnn_utils.project_bboxes(
-    dset_anc_bboxes.reshape(-1, 4), width_scale_factor, height_scale_factor)
-rcnn_utils.draw_bounding_boxes(axes[0], projected_bboxes, line_width=1)
-rcnn_utils.draw_bounding_boxes(axes[1], projected_bboxes, line_width=1)
+    anc_bboxes.reshape(-1, 4), width_scale_factor, height_scale_factor)
 
-plt.show()
+get_required_anchors(projected_bboxes, gt_boxes)
+
+
+
