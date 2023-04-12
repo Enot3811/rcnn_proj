@@ -234,3 +234,40 @@ def project_bboxes(
     proj_bboxes[pad_bbox_mask] = -1
     proj_bboxes = proj_bboxes.reshape(bboxes.shape)
     return proj_bboxes
+
+
+def anc_gt_iou(
+    anc_boxes_all: torch.Tensor, gt_boxes: torch.Tensor
+) -> torch.Tensor:
+    """
+    Calculate intersection over union between all possible boxes and batch of
+    ground truth boxes.
+
+    Args:
+        anc_boxes_all (torch.Tensor): All the possible boxes with a shape
+        `[n_boxes, 4]`. If the shape of this tensor has more than 2 axis then
+        it will be flattened: `[a, b, 4]` -> `[a * b, 4]`.
+        gt_boxes (torch.Tensor): The ground truth boxes with a shape
+        `[B, m_boxes, 4]`.
+
+    Raises:
+        RuntimeError: gt_boxes must have shape like `[B, m_boxes, 4]`.
+
+    Returns:
+        torch.Tensor: IoU tensor with shape `[B, n_boxes, m_boxes]`.
+    """
+    if len(gt_boxes.shape) != 3:
+        raise RuntimeError('gt_boxes must have shape like [B, m_boxes, 4] but '
+                           f'it has {gt_boxes.shape}.')
+    b_size = gt_boxes.size(0)
+
+    if len(anc_boxes_all.shape) > 2:
+        anc_boxes_all = anc_boxes_all.reshape(-1, 4)
+    gt_boxes = gt_boxes.reshape(-1, 4)
+
+    # shape (n_boxes, b * m_boxes)
+    iou = torchvision.ops.box_iou(anc_boxes_all, gt_boxes)
+
+    # Cut into b pieces along dim1, and concatenate it along new dim that will
+    # be equal b_size
+    return torch.stack(torch.chunk(iou, b_size, dim=1))
