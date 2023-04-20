@@ -18,9 +18,18 @@ def get_required_anchors(
     neg_thresh: float = 0.2
 ):
     iou = rcnn_utils.anc_gt_iou(anc_boxes_all, gt_boxes)
-    max_iou, indexes = iou.max(dim=1)
+    max_iou, indexes = iou.max(dim=1, keepdim=True)
+
+    # Get max iou anchors
+    positive_anc_mask = torch.logical_and(iou == max_iou, max_iou > 0.0)
+    # and other that passed the threshold
+    positive_anc_mask = torch.logical_or(positive_anc_mask, iou > pos_thresh)
 
     indexes[max_iou == 0.0] = -1
+
+    positive_anc_mask = positive_anc_mask.flatten(end_dim=1)
+    positive_indexes = torch.where(positive_anc_mask)
+
 
 
     # нужно из anc_boxes_all с размерами (n_boxes, 4) взять только те, которые
@@ -29,7 +38,8 @@ def get_required_anchors(
     # Проблемы сейчас 2
     # 1) Индексы не подойдут, так как в некоторых из них 0 из-за нулевого iou
     # их надо как-то обойти. Предположительно с помощью маски с размером n_boxes
-    # 2) Как-то обойти b_size. Желательно не с помощью цикла. Разные маски для разных картинок
+    # 2) Как-то обойти b_size. Желательно не с помощью цикла. Разные маски для
+    # разных картинок
     b_size = gt_boxes.size(0)
     mask = torch.zeros(*anc_boxes_all.shape, dtype=torch.bool)
 
@@ -46,47 +56,51 @@ def get_required_anchors(
 
 
 
+def main():
+    path = Path('/home/pc0/projects/RCNN_proj/rcnn_proj')
 
-path = Path('/home/pc0/projects/RCNN_proj/rcnn_proj')
+    annotation_path = path.joinpath('data/annotations.xml')
+    img_dir = path.joinpath('data/images')
+    name2index = {'pad': -1, 'camel': 0, 'bird': 1}
+    index2name = {-1: 'pad', 0: 'camel', 1: 'bird'}
+    img_width = 640
+    img_height = 480
 
-annotation_path = path.joinpath('data/annotations.xml')
-img_dir = path.joinpath('data/images')
-name2index = {'pad': -1, 'camel': 0, 'bird': 1}
-index2name = {-1: 'pad', 0: 'camel', 1: 'bird'}
-img_width = 640
-img_height = 480
+    dset = ObjectDetectionDataset(
+        annotation_path, img_dir, (img_width, img_height), name2index)
 
-dset = ObjectDetectionDataset(
-    annotation_path, img_dir, (img_width, img_height), name2index)
+    resnet = torchvision.models.resnet50(
+        weights=torchvision.models.ResNet50_Weights.DEFAULT)
+    backbone = torch.nn.Sequential(*list(resnet.children())[:8])
 
-resnet = torchvision.models.resnet50(
-    weights=torchvision.models.ResNet50_Weights.DEFAULT)
-backbone = torch.nn.Sequential(*list(resnet.children())[:8])
+    dloader = DataLoader(dset, batch_size=2)
+    sample = next(iter(dloader))
+    image, gt_boxes, classes = sample
 
-dloader = DataLoader(dset, batch_size=2)
-sample = next(iter(dloader))
-image, gt_boxes, classes = sample
+    backbone_out = backbone(sample[0])
+    b, out_c, out_h, out_w = backbone_out.shape
 
-backbone_out = backbone(sample[0])
-b, out_c, out_h, out_w = backbone_out.shape
+    width_scale_factor = img_width // out_w
+    height_scale_factor = img_height // out_h
 
-width_scale_factor = img_width // out_w
-height_scale_factor = img_height // out_h
+    x_anchors, y_anchors = rcnn_utils.generate_anchors((out_h, out_w))
+    projected_x_anchors = x_anchors * width_scale_factor
+    projected_y_anchors = y_anchors * height_scale_factor
 
-x_anchors, y_anchors = rcnn_utils.generate_anchors((out_h, out_w))
-projected_x_anchors = x_anchors * width_scale_factor
-projected_y_anchors = y_anchors * height_scale_factor
+    anc_scales = [2, 4, 6]
+    anc_ratios = [0.5, 1, 1.5]
+    anc_bboxes = rcnn_utils.generate_anchor_boxes(
+        x_anchors, y_anchors, anc_scales, anc_ratios, (out_h, out_w))
+    dset_anc_bboxes = anc_bboxes.repeat(len(dset), 1, 1, 1, 1)
 
-anc_scales = [2, 4, 6]
-anc_ratios = [0.5, 1, 1.5]
-anc_bboxes = rcnn_utils.generate_anchor_boxes(
-    x_anchors, y_anchors, anc_scales, anc_ratios, (out_h, out_w))
-dset_anc_bboxes = anc_bboxes.repeat(len(dset), 1, 1, 1, 1)
+    projected_bboxes = rcnn_utils.project_bboxes(
+        anc_bboxes.reshape(-1, 4), width_scale_factor, height_scale_factor)
 
-projected_bboxes = rcnn_utils.project_bboxes(
-    anc_bboxes.reshape(-1, 4), width_scale_factor, height_scale_factor)
-
-get_required_anchors(projected_bboxes, gt_boxes)
+    get_required_anchors(projected_bboxes, gt_boxes)
 
 
-
+if __name__ == '__main__':
+    main()
+    # a = torch.tensor([[1, -1, 3], [-1, 1, -1]])
+    # res = torch.where(a > 0)
+    # print(res)
