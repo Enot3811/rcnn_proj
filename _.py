@@ -14,9 +14,16 @@ import _utils
 def get_required_anchors(
     anc_boxes_all: torch.Tensor,
     gt_boxes: torch.Tensor,
+    gt_classes: torch.Tensor,
     pos_thresh: float = 0.7,
     neg_thresh: float = 0.2
 ):
+    # тип должен получать батч картинок (b, num_all_anchors, max_num_objects)
+    # саму сетку (num_all_anchors, 4)
+    # Истинные боксы (b, max_num_objects, 4)
+    # Классы к истинным боксам (b, max_num_objects)
+    # Должен возвращать индексы истинных рамок (b, n_pos,) !не так!
+
     iou = rcnn_utils.anc_gt_iou(anc_boxes_all, gt_boxes)
     max_iou, indexes = iou.max(dim=1, keepdim=True)
 
@@ -25,39 +32,24 @@ def get_required_anchors(
     # and other that passed the threshold
     positive_anc_mask = torch.logical_or(positive_anc_mask, iou > pos_thresh)
 
-    indexes[max_iou == 0.0] = -1
-
+    # Get batch indexes to indexing in flattened positive indexes tensor.
+    positive_batch_indexes = torch.where(positive_anc_mask)[0]  # (n_pos,)
+    # Flat batch dimension with num_all_anchors
+    # (b * num_all_anchors, max_num_objects)
     positive_anc_mask = positive_anc_mask.flatten(end_dim=1)
-    positive_indexes = torch.where(positive_anc_mask)
+    # We do not need to know number of object in image that has this positive
+    # anchor. We need to know just index in num_all_anchors.
+    positive_indexes = torch.where(positive_anc_mask)[0]
 
+    max_iou_per_anc, max_iou_per_anc_ind = iou.max(axis=-1)
+    max_iou_per_anc = max_iou_per_anc.flatten(end_dim=1)
 
-
-    # нужно из anc_boxes_all с размерами (n_boxes, 4) взять только те, которые
-    # в indexes с размером (b, max_gt)
-    # То есть max_gt боксов для каждой из b картинок
-    # Проблемы сейчас 2
-    # 1) Индексы не подойдут, так как в некоторых из них 0 из-за нулевого iou
-    # их надо как-то обойти. Предположительно с помощью маски с размером n_boxes
-    # 2) Как-то обойти b_size. Желательно не с помощью цикла. Разные маски для
-    # разных картинок
-    b_size = gt_boxes.size(0)
-    mask = torch.zeros(*anc_boxes_all.shape, dtype=torch.bool)
-
-    # 
-    mask[indexes[1]] = True
-
-    # те индексы, которые нужны
-    indexes_mask = iou[1, indexes[1], torch.arange(6)] > pos_thresh
-
-    torch.tensor([torch.arange(b_size), []])
-
-    for i in range(b_size):
-        mask[i]
-
+    gt_boxes.expand()
+    print()
 
 
 def main():
-    path = Path('/home/pc0/projects/RCNN_proj/rcnn_proj')
+    path = Path(__file__).parent
 
     annotation_path = path.joinpath('data/annotations.xml')
     img_dir = path.joinpath('data/images')
@@ -96,7 +88,7 @@ def main():
     projected_bboxes = rcnn_utils.project_bboxes(
         anc_bboxes.reshape(-1, 4), width_scale_factor, height_scale_factor)
 
-    get_required_anchors(projected_bboxes, gt_boxes)
+    get_required_anchors(projected_bboxes, gt_boxes, classes)
 
 
 if __name__ == '__main__':
