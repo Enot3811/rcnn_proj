@@ -240,11 +240,11 @@ def anc_gt_iou(
     anc_boxes_all: torch.Tensor, gt_boxes: torch.Tensor
 ) -> torch.Tensor:
     """
-    Calculate intersection over union between all possible boxes and batch of
+    Calculate intersection over union between all anchor boxes and batch of
     ground truth boxes.
 
     Args:
-        anc_boxes_all (torch.Tensor): All the possible boxes with a shape
+        anc_boxes_all (torch.Tensor): All the anchor boxes with a shape
         `[n_boxes, 4]`. If the shape of this tensor has more than 2 axis then
         it will be flattened: `[a, b, 4]` -> `[a * b, 4]`.
         gt_boxes (torch.Tensor): The ground truth boxes with a shape
