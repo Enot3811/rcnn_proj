@@ -37,7 +37,18 @@ def calculate_gt_offsets(
         positive_anchors, 'xyxy', 'cxcywh')
     gt_bboxes = torchvision.ops.box_convert(gt_bboxes, 'xyxy', 'cxcywh')
 
-    anc_cx, anc_cy, anc_w, anc_h = positive_anchors[:]
+    anc_cx, anc_cy, anc_w, anc_h = (
+        positive_anchors[:, 0], positive_anchors[:, 1],
+        positive_anchors[:, 2], positive_anchors[:, 3])
+    gt_cx, gt_cy, gt_w, gt_h = (
+        gt_bboxes[:, 0], gt_bboxes[:, 1], gt_bboxes[:, 2], gt_bboxes[:, 3])
+
+    dxc = (gt_cx - anc_cx) / anc_w
+    dyc = (gt_cy - anc_cy) / anc_h
+    dw = torch.log(gt_w / anc_w)
+    dh = torch.log(gt_h / anc_h)
+    return torch.stack((dxc, dyc, dw, dh), -1)
+
 
 
 def get_required_anchors(
@@ -71,6 +82,17 @@ def get_required_anchors(
     3.
     И классы gt, к которым они тянутся
 
+    4.
+    Для всех положительных якорей надо посчитать offsets к ближайшим gt
+
+    5.
+    Сами положительные якори тоже вернуть
+
+    6.
+    Посчитать индексы негативных якорей
+
+    7.
+    Сами негативные якори тоже вернуть
 
     
 
@@ -115,7 +137,7 @@ def get_required_anchors(
     max_iou_per_anc = max_iou_per_anc.flatten(end_dim=1)
 
     # Get score for each positive anchors.
-    positive_conf_scores = max_iou_per_anc[positive_anc_indexes]
+    anc_conf_scores = max_iou_per_anc[positive_anc_indexes]
 
     # Get classes of positive anchors
     # expand gt classes to map against every anchor box
@@ -129,20 +151,41 @@ def get_required_anchors(
     anc_classes = anc_classes.flatten(start_dim=0, end_dim=1)
     gt_class_pos = anc_classes[positive_anc_indexes]
 
+    # Expand and flat anchors to iterate with gotten positive indexes
     anc_boxes_all_expand = (anc_boxes_all[None, ...]
                             .expand(b_size, num_anchors, 4)
                             .flatten(end_dim=1))
-    
-    gt_boxes_expand = gt_boxes[:, None, ...].expand(b_size, num_anchors, n_max_objects, 4)
-    gt_boxes_expand = gt_boxes_expand.flatten(end_dim=1)
-    torch.gather(gt_boxes_expand, 1, max)
-
-    
     positive_ancs = anc_boxes_all_expand[positive_anc_indexes]
+    
+    # Expand gt boxes to map every anchor
+    gt_boxes_expand = gt_boxes[:, None, ...].expand(
+        b_size, num_anchors, n_max_objects, 4)  # b, all_anc, max_obj, 4
+    # Get the nearest gt boxes from max_samples gt boxes
+    nearest_gt_boxes = torch.gather(
+        gt_boxes_expand,
+        2,
+        max_iou_per_anc_idx[..., None, None].repeat(1, 1, 1, 4)
+    )  # b, all_anc, 1, 4
+    nearest_gt_boxes = nearest_gt_boxes.flatten(end_dim=2)  # b*all_anc, 4
+    nearest_gt_boxes = nearest_gt_boxes[positive_anc_indexes]  # pos_anc, 4
 
-    calculate_gt_offsets()
+    # Get offsets for positive anchors.
+    gt_offsets = calculate_gt_offsets(
+        positive_ancs, nearest_gt_boxes)  # pos_anc, 4
 
-    return 
+    negative_mask = max_iou_per_anc < neg_thresh
+    negative_anc_indexes = torch.where(negative_mask)[0]
+    # Cut negative anchors. Get the same count as positive.
+    negative_anc_indexes = negative_anc_indexes[
+        torch.randint(0,
+                      negative_anc_indexes.shape[0],
+                      (positive_anc_indexes.shape[0],))]
+    # Get negative nachors
+    negative_ancs = anc_boxes_all_expand[negative_anc_indexes]
+
+    return (positive_anc_indexes, negative_anc_indexes, anc_conf_scores,
+            gt_offsets, gt_class_pos, positive_ancs, negative_ancs,
+            positive_batch_indexes)
 
 
 def main():
@@ -185,7 +228,15 @@ def main():
     projected_bboxes = rcnn_utils.project_bboxes(
         anc_bboxes.reshape(-1, 4), width_scale_factor, height_scale_factor)
 
-    get_required_anchors(projected_bboxes, gt_boxes, classes)
+    positive_anc_ind, negative_anc_ind, GT_conf_scores, \
+    GT_offsets, GT_class_pos, positive_anc_coords, \
+    negative_anc_coords, positive_anc_ind_sep = get_required_anchors(projected_bboxes, gt_boxes, classes)
+    # TODO проверь свою функцию iou. Сейчас есть разница в сотых знаках после запятой с авторской
+    # Судя по тому, что ofssets как раз таки немного отличаются, возможно сами якори немного не совпадают
+    # И походу разница в том, что автор подаёт якори из map
+    # а я подаю в исходном разрешении
+    print()
+
 
 
 if __name__ == '__main__':
