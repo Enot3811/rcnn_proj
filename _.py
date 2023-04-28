@@ -89,29 +89,30 @@ def get_required_anchors(
     num_anchors = anc_boxes_all.shape[0]
     b_size, n_max_objects = gt_boxes.shape[0:2]
 
-    iou = rcnn_utils.anc_gt_iou(anc_boxes_all, gt_boxes)
-    max_iou_per_gt, indexes = iou.max(dim=1, keepdim=True)
+    iou = rcnn_utils.anc_gt_iou(anc_boxes_all, gt_boxes)  # b, all_anc, max_obj
+    max_iou_per_gt, indexes = iou.max(dim=1, keepdim=True)  # b, 1, max_obj
 
-    # Get max iou anchors
+    # Get max anchors' iou per each the object.
     positive_anc_mask = torch.logical_and(
         iou == max_iou_per_gt, max_iou_per_gt > 0.0)
-    # and other that passed the threshold
+    # and other that passed the threshold.
     positive_anc_mask = torch.logical_or(positive_anc_mask, iou > pos_thresh)
 
-    # Get batch indexes of positive anchors.
-    # It need for indexing after flatting.
+    # Get batch indexes of the positive anchors.
+    # It is necessary to determine the ownership of the anchors.
     positive_batch_indexes = torch.where(positive_anc_mask)[0]
-    # Flat batch dimension with num_all_anchors
+    # Flat a batch dimension with num_all_anchors
     # (b * num_all_anchors, max_num_objects)
     positive_anc_mask = positive_anc_mask.flatten(end_dim=1)
     # We do not need to know number of object in image that has this positive
     # anchor. We need to know just index in num_all_anchors.
     positive_anc_indexes = torch.where(positive_anc_mask)[0]
 
-    # And now calculate max iou for every positive anchor and get indexes of
-    # gt bbox it overlaps with the most.
-    max_iou_per_anc, max_iou_per_anc_idx = iou.max(dim=-1)  # b x ancs
-    max_iou_per_anc = max_iou_per_anc.flatten(end_dim=1)  # b * ancs x max_obj
+    # Now need to determine the nearest gt bbox for every anchor
+    max_iou_per_anc, max_iou_per_anc_idx = iou.max(dim=-1)  # b, all_anc
+    # Flat tensor so the positive indexes fit
+    # b * all_anc, max_obj
+    max_iou_per_anc = max_iou_per_anc.flatten(end_dim=1)
 
     # Get score for each positive anchors.
     positive_conf_scores = max_iou_per_anc[positive_anc_indexes]
@@ -124,12 +125,24 @@ def get_required_anchors(
     # it overlaps with the most.
     anc_classes = torch.gather(
         gt_classes_expand, -1, max_iou_per_anc_idx[..., None]).squeeze(-1)
-    # combine all the batches and get the mapped classes
-    # of the positive anchor boxes.
+    # Flat tensor so the positive indexes fit
     anc_classes = anc_classes.flatten(start_dim=0, end_dim=1)
     gt_class_pos = anc_classes[positive_anc_indexes]
 
-    return
+    anc_boxes_all_expand = (anc_boxes_all[None, ...]
+                            .expand(b_size, num_anchors, 4)
+                            .flatten(end_dim=1))
+    
+    gt_boxes_expand = gt_boxes[:, None, ...].expand(b_size, num_anchors, n_max_objects, 4)
+    gt_boxes_expand = gt_boxes_expand.flatten(end_dim=1)
+    torch.gather(gt_boxes_expand, 1, max)
+
+    
+    positive_ancs = anc_boxes_all_expand[positive_anc_indexes]
+
+    calculate_gt_offsets()
+
+    return 
 
 
 def main():
