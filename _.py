@@ -11,6 +11,35 @@ from object_detection_dataset import ObjectDetectionDataset
 import _utils
 
 
+def calculate_gt_offsets(
+    positive_anchors: torch.Tensor,
+    gt_bboxes: torch.Tensor
+) -> torch.Tensor:
+    """
+    Calculate offsets between selected anchors and corresponding gt bboxes.
+
+    Offsets are:
+    1) dxc = (gt_cx - anc_cx) / anc_w
+    2) dyc = (gt_cy - anc_cy) / anc_h
+    3) dw = log(gt_w / anc_w)
+    4) dh = log(gt_h / anc_h)
+
+    Args:
+        positive_anchors (torch.Tensor): The positive anchors with shape
+        `[n_anc, 4]` in xyxy system.
+        gt_bboxes (torch.Tensor): Ground truth bounding boxes with shape
+        `[n_anc, 4]` in xyxy system.
+
+    Returns:
+        torch.Tensor: The offsets with shape `[]`
+    """
+    positive_anchors = torchvision.ops.box_convert(
+        positive_anchors, 'xyxy', 'cxcywh')
+    gt_bboxes = torchvision.ops.box_convert(gt_bboxes, 'xyxy', 'cxcywh')
+
+    anc_cx, anc_cy, anc_w, anc_h = positive_anchors[:]
+
+
 def get_required_anchors(
     anc_boxes_all: torch.Tensor,
     gt_boxes: torch.Tensor,
