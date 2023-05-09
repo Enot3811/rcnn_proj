@@ -224,17 +224,15 @@ def main():
     anc_bboxes = rcnn_utils.generate_anchor_boxes(
         x_anchors, y_anchors, anc_scales, anc_ratios, (out_h, out_w))
     dset_anc_bboxes = anc_bboxes.repeat(len(dset), 1, 1, 1, 1)
-
-    projected_bboxes = rcnn_utils.project_bboxes(
-        anc_bboxes.reshape(-1, 4), width_scale_factor, height_scale_factor)
+    
+    projected_gt = rcnn_utils.project_bboxes(
+        gt_boxes.reshape(-1, 4), width_scale_factor,
+        height_scale_factor, 'p2a').reshape(gt_boxes.shape)
 
     positive_anc_ind, negative_anc_ind, GT_conf_scores, \
     GT_offsets, GT_class_pos, positive_anc_coords, \
-    negative_anc_coords, positive_anc_ind_sep = get_required_anchors(projected_bboxes, gt_boxes, classes)
-    # TODO проверь свою функцию iou. Сейчас есть разница в сотых знаках после запятой с авторской
-    # Судя по тому, что ofssets как раз таки немного отличаются, возможно сами якори немного не совпадают
-    # И походу разница в том, что автор подаёт якори из map
-    # а я подаю в исходном разрешении
+    negative_anc_coords, positive_anc_ind_sep = get_required_anchors(
+        anc_bboxes.reshape(-1, 4), projected_gt, classes)
     print()
 
 
