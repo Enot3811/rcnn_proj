@@ -121,12 +121,11 @@ class ObjectDetectionDataset(Dataset):
                 bbox[[0, 2]] *= scale_x
                 bbox[[1, 3]] *= scale_y
 
-                sample_boxes.append(bbox.int().tolist())
+                sample_boxes.append(bbox)
 
                 sample_classes.append(name2index[box.get('label')])
 
-            gt_boxes.append(
-                torch.tensor(sample_boxes, dtype=torch.float32))
+            gt_boxes.append(torch.stack(sample_boxes))
             gt_classes.append(
                 torch.tensor(sample_classes, dtype=torch.float32))
 
