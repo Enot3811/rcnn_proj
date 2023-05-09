@@ -67,28 +67,28 @@ class ObjectDetectionDataset(Dataset):
         img_size: Tuple[int, int],
         image_dir: Path,
         name2index: Dict[str, int]
-    ) -> Tuple[List, List, List]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, List]:
         """
-        Parse annotation xml.
-        Resize ground truth bounding boxes to the scaled image size and
-        replace label names with numeric indexes.
+        Parse an annotation xml. Converts input data to an appropriate format.
 
         Parameters
         ----------
         annotation_path : Path
             Path to annotation xml file.
         img_size : Tuple[int, int]
-            Size to rescale images in dataset.
+            A size to rescale images in dataset.
         image_dir : Path
-            Path to directory that contains images.
+            A path to directory that contains images.
         name2index: Dict[str, int]
-            Dictionary that contain pairs consists from label name
-            and corresponding index.
+            A dictionary that contains pairs consisting of a label name
+            and a corresponding index.
 
         Returns
         -------
-        Tuple[List, List, List]
-            Lists that contain bounding boxes tensors, classes and image paths.
+        Tuple[torch.Tensor, torch.Tensor, List]
+            Ground truth bounding boxes with shape `[n_samples, n_max_obj, 4]`,
+            ground truth classes with shape `[n_samples, n_max_obj]` and
+            a list of image paths.
         """
         tree = ET.parse(annotation_path)
         root = tree.getroot()
