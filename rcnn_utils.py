@@ -213,8 +213,7 @@ def project_bboxes(
     Parameters
     ----------
     bboxes : torch.Tensor
-        A tensor with shape `[B_size, Hmap, Wmap, n_anchor_boxes, 4]`
-        that contains bounding boxes.
+        A tensor with shape `[n_bboxes, 4]` that contains bounding boxes.
     width_scale_factor : float
         A scale factor across a width.
     height_scale_factor : float
@@ -227,8 +226,7 @@ def project_bboxes(
     Returns
     -------
     torch.Tensor
-        The projected bounding boxes with shape
-        `[B_size, Hmap, Wmap, n_anchor_boxes, 4]`.
+        The projected bounding boxes with shape `[n_bboxes, 4]`.
 
     Raises
     ------
