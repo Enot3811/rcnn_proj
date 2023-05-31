@@ -125,9 +125,10 @@ def generate_anchor_boxes(
     anc_ratios: Union[List[float], torch.Tensor],
     map_size: Tuple[int, int]
 ) -> torch.Tensor:
-    """
+    """Create anchor boxes.
+
     Generate tensor with shape `[Hmap, Wmap, n_anchor_boxes, 4]`
-    that consists of bounding boxes that are generated from given anchors
+    that consists of bounding boxes that are generated from given coordinates
     and specified scales and ratios.
 
     The number of the anchor boxes is:\n
@@ -139,15 +140,25 @@ def generate_anchor_boxes(
     `ymin = y_anc - scale / 2`\n
     `ymax = y_anc + scale / 2`
 
-    Args:
-        x_anchors (torch.Tensor): X coordinates of the anchors.
-        y_anchors (torch.Tensor): Y coordinates of the anchors.
-        anc_scales (Union[List[float], torch.Tensor]): The scales for boxes.
-        anc_ratios (Union[List[float], torch.Tensor]): The ratios for boxes.
-        map_size (Tuple[int, int]): A size of the map.
+    The generated anchors are clipped to fit the map (image).
 
-    Returns:
-        torch.Tensor: The generated bounding boxes.
+    Parameters
+    ----------
+    x_anchors : torch.Tensor
+        X coordinates of the anchors.
+    y_anchors : torch.Tensor
+        Y coordinates of the anchors.
+    anc_scales : Union[List[float], torch.Tensor]
+        The scales for boxes.
+    anc_ratios : Union[List[float], torch.Tensor]
+        The ratios for boxes.
+    map_size : Tuple[int, int]
+        A size of the map.
+
+    Returns
+    -------
+    torch.Tensor
+        The generated bounding boxes.
     """
     if isinstance(anc_scales, list):
         anc_scales = torch.Tensor(anc_scales)
@@ -197,29 +208,37 @@ def project_bboxes(
     height_scale_factor: float,
     mode='a2p'
 ) -> torch.Tensor:
-    """
-    Project bounding boxes to a defined scaled space.
+    """Project bounding boxes to a defined scaled space.
 
-    Args:
-        bboxes (torch.Tensor): A tensor with shape
-        `[B_size, Hmap, Wmap, n_anchor_boxes, 4]` that contains bounding
-        boxes.
-        width_scale_factor (float): A scale factor across a width.
-        height_scale_factor (float): A scale factor across a height.
-        mode (str, optional): A mode of projection. It can be `a2p` or `p2a`
+    Parameters
+    ----------
+    bboxes : torch.Tensor
+        A tensor with shape `[B_size, Hmap, Wmap, n_anchor_boxes, 4]`
+        that contains bounding boxes.
+    width_scale_factor : float
+        A scale factor across a width.
+    height_scale_factor : float
+        A scale factor across a height.
+    mode : str, optional
+        A mode of a projection. It can be `a2p` or `p2a`
         that correspond to an activation map to a pixel image projection and
-        a pixel image to activation map.
+        a pixel image to activation map. by default 'a2p'
 
-    Raises:
-        ValueError: The mode must be either a2p or p2a
-
-    Returns:
-        torch.Tensor: The projected bounding boxes with shape
+    Returns
+    -------
+    torch.Tensor
+        The projected bounding boxes with shape
         `[B_size, Hmap, Wmap, n_anchor_boxes, 4]`.
+
+    Raises
+    ------
+    ValueError
+        The mode must be either "a2p" or "p2a".
     """
     if mode not in ('a2p', 'p2a'):
         raise ValueError(
-            f'The mode must be either a2p or p2a, but given mode is {mode}')
+            'The mode must be either "a2p" or "p2a", '
+            f'but given mode is {mode}.')
     batch_size = bboxes.shape[0]
     proj_bboxes = bboxes.clone().reshape(batch_size, -1, 4)
     pad_bbox_mask = (proj_bboxes == -1)  # indicating padded bboxes
@@ -243,18 +262,24 @@ def anc_gt_iou(
     Calculate intersection over union between all anchor boxes and batch of
     ground truth boxes.
 
-    Args:
-        anc_boxes_all (torch.Tensor): All the anchor boxes with a shape
-        `[n_boxes, 4]`. If the shape of this tensor has more than 2 axis then
-        it will be flattened: `[a, b, 4]` -> `[a * b, 4]`.
-        gt_boxes (torch.Tensor): The ground truth boxes with a shape
-        `[B, m_boxes, 4]`.
+    Parameters
+    ----------
+    anc_boxes_all : torch.Tensor
+        All the anchor boxes with a shape `[n_boxes, 4]`.
+        If the shape of this tensor has more than 2 axis
+        then it will be flattened: `[a, b, 4]` -> `[a * b, 4]`.
+    gt_boxes : torch.Tensor
+        The ground truth boxes with a shape `[B, m_boxes, 4]`.
 
-    Raises:
-        RuntimeError: gt_boxes must have shape like `[B, m_boxes, 4]`.
+    Returns
+    -------
+    torch.Tensor
+        IoU tensor with shape `[B, n_boxes, m_boxes]`.
 
-    Returns:
-        torch.Tensor: IoU tensor with shape `[B, n_boxes, m_boxes]`.
+    Raises
+    ------
+    RuntimeError
+        gt_boxes must have shape like `[B, m_boxes, 4]`.
     """
     if len(gt_boxes.shape) != 3:
         raise RuntimeError('gt_boxes must have shape like [B, m_boxes, 4] but '
