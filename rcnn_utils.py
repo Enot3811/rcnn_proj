@@ -254,18 +254,16 @@ def project_bboxes(
 
 
 def anc_gt_iou(
-    anc_boxes_all: torch.Tensor, gt_boxes: torch.Tensor
+    anc_boxes_grid: torch.Tensor, gt_boxes: torch.Tensor
 ) -> torch.Tensor:
     """
-    Calculate intersection over union between all anchor boxes and batch of
+    Calculate intersection over union between anchor boxes and batch of
     ground truth boxes.
 
     Parameters
     ----------
     anc_boxes_all : torch.Tensor
-        All the anchor boxes with a shape `[n_boxes, 4]`.
-        If the shape of this tensor has more than 2 axis
-        then it will be flattened: `[a, b, 4]` -> `[a * b, 4]`.
+        A grid of the anchor boxes with a shape `[n_boxes, 4]`.
     gt_boxes : torch.Tensor
         The ground truth boxes with a shape `[B, m_boxes, 4]`.
 
@@ -278,18 +276,23 @@ def anc_gt_iou(
     ------
     RuntimeError
         gt_boxes must have shape like `[B, m_boxes, 4]`.
+    RuntimeError
+        anc_boxes_grid must have shape like [B, m_boxes, 4].
     """
     if len(gt_boxes.shape) != 3:
-        raise RuntimeError('gt_boxes must have shape like [B, m_boxes, 4] but '
-                           f'it has {gt_boxes.shape}.')
+        raise RuntimeError(
+            'gt_boxes must have shape like [B, m_boxes, 4] but '
+            f'it has {gt_boxes.shape}.')
+    if len(anc_boxes_grid.shape) != 2:
+        raise RuntimeError(
+            'anc_boxes_grid must have shape like [B, m_boxes, 4] but '
+            f'it has {gt_boxes.shape}.')
+    
     b_size = gt_boxes.size(0)
-
-    if len(anc_boxes_all.shape) > 2:
-        anc_boxes_all = anc_boxes_all.reshape(-1, 4)
     gt_boxes = gt_boxes.reshape(-1, 4)
 
     # shape (n_boxes, b * m_boxes)
-    iou = torchvision.ops.box_iou(anc_boxes_all, gt_boxes)
+    iou = torchvision.ops.box_iou(anc_boxes_grid, gt_boxes)
 
     # Cut into b pieces along dim1, and concatenate it along new dim that will
     # be equal b_size
