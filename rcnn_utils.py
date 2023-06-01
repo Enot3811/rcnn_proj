@@ -187,11 +187,11 @@ def generate_anchor_boxes(
     n_y = y_mins.shape[0]
     n_x = x_mins.shape[0]
     anc_base = torch.cat((
-        torch.stack((x_mins[:, None, :].repeat(1, n_y, 1),
-                    y_mins[None, :].repeat(n_x, 1, 1)),
+        torch.stack((x_mins[None, ...].repeat(n_y, 1, 1),
+                     y_mins[:, None, :].repeat(1, n_x, 1)),
                     dim=3),
-        x_maxs[:, None, :].repeat(1, n_y, 1)[..., None],
-        y_maxs[None, :].repeat(n_x, 1, 1)[..., None]),
+        x_maxs[None, ...].repeat(n_y, 1, 1)[..., None],
+        y_maxs[:, None, :].repeat(1, n_x, 1)[..., None]),
         dim=3)
 
     orig_shape = anc_base.shape
