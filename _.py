@@ -58,7 +58,7 @@ def get_positive_anchors(
     То есть индекс батча и индекс на гриде
     Которые с самой большой уверенностью, и которые прошли порог.
 
-    Ещё здесь удобно и scores к этим якорям
+    Ещё здесь удобно и scores к этим якорям и смещение
 
     Parameters
     ----------
@@ -71,28 +71,29 @@ def get_positive_anchors(
     pos_thresh : float, optional
         _description_, by default 0.7
     """
-    n_anc_per_img = anc_boxes_all.shape[1]
+    n_img_anc_box = anc_boxes_all.shape[1]
     b_size, n_max_obj = gt_boxes.shape[:2]
 
-    # Send only anchor boxes grid (one slice of the anchors batch)
     # iou shape - (b, all_anc, max_obj)
+    # anc_boxes_all[0] as a grid. There is no necessary to send all anc boxes.
     iou = rcnn_utils.anc_gt_iou(anc_boxes_all[0], gt_boxes)
-    max_iou_per_gt, indexes = iou.max(dim=1, keepdim=True)  # (b, 1, max_obj)
+    max_iou_per_gt, _ = iou.max(dim=1, keepdim=True)  # (b, 1, max_obj)
 
     # Get max anchors' iou per each ground truth.
-    positive_anc_mask = torch.logical_and(
+    pos_anc_mask = torch.logical_and(
         iou == max_iou_per_gt, max_iou_per_gt > 0.0)
     # and other that passed the threshold.
-    positive_anc_mask = torch.logical_or(positive_anc_mask, iou > pos_thresh)
+    pos_anc_mask = torch.logical_or(pos_anc_mask, iou > pos_thresh)
 
-    # Get batch indexes of the positive anchors.
-    pos_batch_idxs = torch.where(positive_anc_mask)[0]
+    # Get batch indexes of the positive anchors
+    # Next batch will be flatten, so this indexes are needed.
+    pos_anc_b_idxs = torch.where(pos_anc_mask)[0]
     # Flat a batch dimension with num_all_anchors
     # (b * num_all_anchors, max_num_objects)
-    positive_anc_mask = positive_anc_mask.flatten(end_dim=1)
+    pos_anc_mask = pos_anc_mask.flatten(end_dim=1)
     # We don't need to know number of object in image that has this positive
     # anchor. We need to know just index in num_all_anchors.
-    positive_anc_indexes = torch.where(positive_anc_mask)[0]
+    pos_anc_idxs = torch.where(pos_anc_mask)[0]
 
 
 def get_required_anchors(
@@ -295,11 +296,21 @@ def main():
         gt_boxes.reshape(-1, 4), width_scale_factor,
         height_scale_factor, 'p2a').reshape(gt_boxes.shape)
 
+    get_positive_anchors(all_anc_bboxes.reshape(b, -1, 4), projected_gt, classes)
+
     positive_anc_ind, negative_anc_ind, GT_conf_scores, \
     GT_offsets, GT_class_pos, positive_anc_coords, \
     negative_anc_coords, positive_anc_ind_sep = get_required_anchors(
         all_anc_bboxes.reshape(b, -1, 4), projected_gt, classes)
     print()
+
+
+if __name__ == '__main__':
+    main()
+    # source_pipeline()
+    # a = torch.tensor([[1, -1, 3], [-1, 1, -1]])
+    # res = torch.where(a > 0)
+    # print(res)
 
 
 def source_pipeline():
@@ -471,11 +482,3 @@ def source_pipeline():
             total_loss += loss.item()
         
         loss_list.append(total_loss)
-
-
-if __name__ == '__main__':
-    # main()
-    source_pipeline()
-    # a = torch.tensor([[1, -1, 3], [-1, 1, -1]])
-    # res = torch.where(a > 0)
-    # print(res)
