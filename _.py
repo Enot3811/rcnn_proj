@@ -1,18 +1,20 @@
 from pathlib import Path
+from typing import Tuple
 
 import torch
+from torch import Tensor
 import torchvision
 from torch.utils.data import DataLoader
 
 import rcnn_utils
-import image_utils
+
 from object_detection_dataset import ObjectDetectionDataset
 
 
 def calculate_gt_offsets(
-    positive_anchors: torch.Tensor,
-    gt_bboxes: torch.Tensor
-) -> torch.Tensor:
+    positive_anchors: Tensor,
+    gt_bboxes: Tensor
+) -> Tensor:
     """
     Calculate offsets between selected anchors and corresponding gt bboxes.
 
@@ -23,13 +25,13 @@ def calculate_gt_offsets(
     4) dh = log(gt_h / anc_h)
 
     Args:
-        positive_anchors (torch.Tensor): The positive anchors with shape
+        positive_anchors (Tensor): The positive anchors with shape
         `[n_anc, 4]` in xyxy system.
-        gt_bboxes (torch.Tensor): Ground truth bounding boxes with shape
+        gt_bboxes (Tensor): Ground truth bounding boxes with shape
         `[n_anc, 4]` in xyxy system.
 
     Returns:
-        torch.Tensor: The offsets with shape `[]`
+        Tensor: The offsets with shape `[]`
     """
     positive_anchors = torchvision.ops.box_convert(
         positive_anchors, 'xyxy', 'cxcywh')
@@ -48,131 +50,48 @@ def calculate_gt_offsets(
     return torch.stack((dxc, dyc, dw, dh), -1)
 
 
-def get_positive_anchors(
-    anc_boxes_all: torch.Tensor,
-    gt_boxes: torch.Tensor,
-    gt_classes: torch.Tensor,
-    pos_thresh: float = 0.7
-):
-    """Хочу чтобы возвращал индексы anchor bboxes в all_anchors
-    То есть индекс батча и индекс на гриде
-    Которые с самой большой уверенностью, и которые прошли порог.
-
-    Ещё здесь удобно и scores к этим якорям и смещение
-
-    Parameters
-    ----------
-    anc_boxes_all : torch.Tensor
-        shape (b, n_anc_per_img, 4)
-    gt_boxes : torch.Tensor
-        shape (b, n_max_obj, 4)
-    gt_classes : torch.Tensor
-        shape (b, n_max_obj)
-    pos_thresh : float, optional
-        _description_, by default 0.7
-    """
-    n_img_anc_box = anc_boxes_all.shape[1]
-    b_size, n_max_obj = gt_boxes.shape[:2]
-
-    # iou shape - (b, all_anc, max_obj)
-    # anc_boxes_all[0] as a grid. There is no necessary to send all anc boxes.
-    iou = rcnn_utils.anc_gt_iou(anc_boxes_all[0], gt_boxes)
-    max_iou_per_gt, _ = iou.max(dim=1, keepdim=True)  # (b, 1, max_obj)
-
-    # Get max anchors' iou per each ground truth.
-    pos_anc_mask = torch.logical_and(
-        iou == max_iou_per_gt, max_iou_per_gt > 0.0)
-    # and other that passed the threshold.
-    pos_anc_mask = torch.logical_or(pos_anc_mask, iou > pos_thresh)
-
-    # Get batch indexes of the positive anchors
-    # Next batch will be flatten, so this indexes are needed.
-    pos_anc_b_idxs = torch.where(pos_anc_mask)[0]
-    # Flat a batch dimension with num_all_anchors
-    # (b * num_all_anchors, max_num_objects)
-    pos_anc_mask = pos_anc_mask.flatten(end_dim=1)
-    # We don't need to know number of object in image that has this positive
-    # anchor. We need to know just index in num_all_anchors.
-    pos_anc_idxs = torch.where(pos_anc_mask)[0]
-
-
 def get_required_anchors(
-    anc_boxes_all: torch.Tensor,
-    gt_boxes: torch.Tensor,
-    gt_classes: torch.Tensor,
+    anc_boxes_all: Tensor,
+    gt_boxes: Tensor,
+    gt_classes: Tensor,
     pos_thresh: float = 0.7,
     neg_thresh: float = 0.2
-):
+) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
     """Get required anchors from all available ones.
+
+    Get indices for positive anchor boxes, and the same number of indices for
+    negative ones, `pos_anc_idxs` and `neg_anc_idxs` respectively.
+
+    For positive boxes get indices of batch additionally, `pos_b_idxs`.
+
+    With the indices get the corresponding boxes in xyxy system,
+    `pos_ancs` and `neg_ancs`.
+
+    For positive anchor boxes get IoU metric `pos_anc_conf_scores`,
+    a corresponding class `gt_class_pos`
+    and offsets from ground truth bounding boxes `gt_offsets`.
 
     Parameters
     ----------
-    anc_boxes_all : torch.Tensor
-        
-    gt_boxes : torch.Tensor
-        _description_
-    gt_classes : torch.Tensor
-        _description_
+    anc_boxes_all : Tensor
+        All anchor boxes with shape `(b, n_anc_per_img, 4)`.
+    gt_boxes : Tensor
+        Ground truth bounding boxes with shape `(b, n_max_obj, 4)`.
+    gt_classes : Tensor
+        Classes corresponding the given ground truth boxes
+        with shape `(b, n_max_obj)`.
     pos_thresh : float, optional
-        _description_, by default 0.7
+        Confidence threshold for positive anchor boxes. By default is 0.7.
     neg_thresh : float, optional
-        _description_, by default 0.2
+        Confidence threshold for negative anchor boxes. By default is 0.2.
 
     Returns
     -------
-    _type_
-        _description_
-    """    
+    Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]
+        Tuple consists of described above `pos_anc_idxs`, `neg_anc_idxs`,
+        `pos_b_idxs`, `pos_ancs`, `neg_ancs`, `pos_anc_conf_scores`,
+        `gt_class_pos` and `gt_offsets`.
     """
-    Подаётся сетка из якорных рамок (n_bboxes, 4), рамки истинных меток
-    (b, n_max_objects, 4) и метки классов (b, n_max_objects)
-    Также пороги прохождения.
-    
-    1.
-    Нужно достать индексы положительных якорных рамок, которые
-    1) Являются самыми близкими по iou к истинным рамкам
-    2) Чьё iou больше порога
-    
-    Так как количество подходящих якорей к разным картинкам будет разное,
-    придётся вытянуть их.
-    b, n_pos_anc (разное), 4 -> b * n_pos_anc, 4 -> n_pos_anc_all, 4
-    В итоге индексы этого вытянутого масива и будут индексами
-    подходящих положительных.
-    Однако так как батчи сольются вместе, придётся вместе с этим запомнить
-    индексы исходных батчей для положительных.
-
-    2.
-    К этим положительным якорям нужно вытащить iou
-
-    3.
-    И классы gt, к которым они тянутся
-
-    4.
-    Для всех положительных якорей надо посчитать offsets к ближайшим gt
-
-    5.
-    Сами положительные якори тоже вернуть
-
-    6.
-    Посчитать индексы негативных якорей
-
-    7.
-    Сами негативные якори тоже вернуть
-
-    
-
-    Args:
-        anc_boxes_all (torch.Tensor): _description_
-        gt_boxes (torch.Tensor): _description_
-        gt_classes (torch.Tensor): shape is `[b, max_num_objects]`
-        pos_thresh (float, optional): _description_. Defaults to 0.7.
-        neg_thresh (float, optional): _description_. Defaults to 0.2.
-    """
-    # тип должен получать батч картинок (b, num_all_anchors, max_num_objects)
-    # саму сетку (num_all_anchors, 4)
-    # Истинные боксы (b, max_num_objects, 4)
-    # Классы к истинным боксам (b, max_num_objects)
-    # Должен возвращать индексы истинных рамок (b, n_pos,) !не так!
     anchors_per_img = anc_boxes_all.shape[1]
     b_size, n_max_objects = gt_boxes.shape[:2]
 
@@ -189,13 +108,13 @@ def get_required_anchors(
 
     # Get batch indexes of the positive anchors.
     # It is necessary to determine the ownership of the anchors.
-    positive_batch_indexes = torch.where(positive_anc_mask)[0]
+    pos_b_idxs = torch.where(positive_anc_mask)[0]
     # Flat a batch dimension with num_all_anchors
     # (b * num_all_anchors, max_num_objects)
     positive_anc_mask = positive_anc_mask.flatten(end_dim=1)
     # We do not need to know number of object in image that has this positive
     # anchor. We need to know just index in num_all_anchors.
-    positive_anc_indexes = torch.where(positive_anc_mask)[0]
+    pos_anc_idxs = torch.where(positive_anc_mask)[0]
 
     # Now need to determine the nearest gt bbox for every anchor
     max_iou_per_anc, max_iou_per_anc_idx = iou.max(dim=-1)  # b, all_anc
@@ -204,7 +123,7 @@ def get_required_anchors(
     max_iou_per_anc = max_iou_per_anc.flatten(end_dim=1)
 
     # Get score for each positive anchors.
-    anc_conf_scores = max_iou_per_anc[positive_anc_indexes]
+    pos_anc_conf_scores = max_iou_per_anc[pos_anc_idxs]
 
     # Get classes of positive anchors
     # expand gt classes to map against every anchor box
@@ -216,13 +135,13 @@ def get_required_anchors(
         gt_classes_expand, -1, max_iou_per_anc_idx[..., None]).squeeze(-1)
     # Flat tensor so the positive indexes fit
     anc_classes = anc_classes.flatten(start_dim=0, end_dim=1)
-    gt_class_pos = anc_classes[positive_anc_indexes]
+    gt_class_pos = anc_classes[pos_anc_idxs]
 
     # Expand and flat anchors to iterate with gotten positive indexes
     anc_boxes_all_expand = (anc_boxes_all[None, ...]
                             .expand(b_size, anchors_per_img, 4)
                             .flatten(end_dim=1))
-    positive_ancs = anc_boxes_all_expand[positive_anc_indexes]
+    pos_ancs = anc_boxes_all_expand[pos_anc_idxs]
     
     # Expand gt boxes to map every anchor
     gt_boxes_expand = gt_boxes[:, None, ...].expand(
@@ -234,25 +153,24 @@ def get_required_anchors(
         max_iou_per_anc_idx[..., None, None].repeat(1, 1, 1, 4)
     )  # b, all_anc, 1, 4
     nearest_gt_boxes = nearest_gt_boxes.flatten(end_dim=2)  # b*all_anc, 4
-    nearest_gt_boxes = nearest_gt_boxes[positive_anc_indexes]  # pos_anc, 4
+    nearest_gt_boxes = nearest_gt_boxes[pos_anc_idxs]  # pos_anc, 4
 
     # Get offsets for positive anchors.
     gt_offsets = calculate_gt_offsets(
-        positive_ancs, nearest_gt_boxes)  # pos_anc, 4
+        pos_ancs, nearest_gt_boxes)  # pos_anc, 4
 
     negative_mask = max_iou_per_anc < neg_thresh
-    negative_anc_indexes = torch.where(negative_mask)[0]
+    neg_anc_idxs = torch.where(negative_mask)[0]
     # Cut negative anchors. Get the same count as positive.
-    negative_anc_indexes = negative_anc_indexes[
+    neg_anc_idxs = neg_anc_idxs[
         torch.randint(0,
-                      negative_anc_indexes.shape[0],
-                      (positive_anc_indexes.shape[0],))]
-    # Get negative nachors
-    negative_ancs = anc_boxes_all_expand[negative_anc_indexes]
+                      neg_anc_idxs.shape[0],
+                      (pos_anc_idxs.shape[0],))]
+    # Get negative anchors
+    neg_ancs = anc_boxes_all_expand[neg_anc_idxs]
 
-    return (positive_anc_indexes, negative_anc_indexes, anc_conf_scores,
-            gt_offsets, gt_class_pos, positive_ancs, negative_ancs,
-            positive_batch_indexes)
+    return (pos_anc_idxs, neg_anc_idxs, pos_b_idxs, pos_ancs, neg_ancs,
+            pos_anc_conf_scores, gt_class_pos, gt_offsets)
 
 
 def main():
@@ -296,8 +214,6 @@ def main():
         gt_boxes.reshape(-1, 4), width_scale_factor,
         height_scale_factor, 'p2a').reshape(gt_boxes.shape)
 
-    get_positive_anchors(all_anc_bboxes.reshape(b, -1, 4), projected_gt, classes)
-
     positive_anc_ind, negative_anc_ind, GT_conf_scores, \
     GT_offsets, GT_class_pos, positive_anc_coords, \
     negative_anc_coords, positive_anc_ind_sep = get_required_anchors(
@@ -335,9 +251,9 @@ def source_pipeline():
         
         Returns
         ------------
-        images: torch.Tensor of size (B, C, H, W)
-        gt bboxes: torch.Tensor of size (B, max_objects, 4)
-        gt classes: torch.Tensor of size (B, max_objects)
+        images: Tensor of size (B, C, H, W)
+        gt bboxes: Tensor of size (B, max_objects, 4)
+        gt classes: Tensor of size (B, max_objects)
         '''
         def __init__(self, annotation_path, img_dir, img_size, name2idx):
             self.annotation_path = annotation_path
@@ -374,7 +290,7 @@ def source_pipeline():
                 
                 # encode class names as integers
                 gt_classes = gt_classes_all[i]
-                gt_idx = torch.Tensor([self.name2idx[name] for name in gt_classes])
+                gt_idx = torch.tensor([self.name2idx[name] for name in gt_classes])
                 
                 img_data_all.append(img_tensor)
                 gt_idxs_all.append(gt_idx)
