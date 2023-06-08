@@ -14,9 +14,10 @@ from matplotlib import patches
 def draw_bounding_boxes(
     ax: plt.Axes,
     bboxes: Tensor,
-    labels: Optional[Tensor] = None,
-    index2name: Optional[Dict[int, str]] = None,
-    line_width: Optional[int] = 2
+    labels: Tensor = None,
+    index2name: Dict[int, str] = None,
+    line_width: int = 2,
+    color: str = 'y',
 ) -> plt.Axes:
     """
     Show bounding boxes and corresponding labels on a given Axes.
@@ -27,12 +28,14 @@ def draw_bounding_boxes(
         Axes with a sample image.
     bboxes : Tensor
         A tensor with shape `[N_bboxes, 4]` that contains the bounding boxes.
-    labels : Optional[Tensor]
+    labels : Tensor, optional
         Labels that correspond the bounding boxes.
-    index2name : Optional[Dict[int, str]]
+    index2name : Dict[int, str], optional
         A converter dict from int labels to names.
-    line_width : Optional[int]
-        A width of bounding boxes' lines
+    line_width : int, optional
+        A width of the bounding boxes' lines, By default is 2.
+    color : str, optional
+        A color of the bounding boxes' lines. By default is "y".
 
     Returns
     -------
@@ -48,7 +51,7 @@ def draw_bounding_boxes(
         xmin, ymin, xmax, ymax = bbox.numpy()
         rect = patches.Rectangle(
             (xmin, ymin), xmax - xmin, ymax - ymin, linewidth=line_width,
-            edgecolor='y', facecolor='none')
+            edgecolor=color, facecolor='none')
         ax.add_patch(rect)
 
         if label != 'pad' and label != -1:
@@ -425,10 +428,8 @@ def get_required_anchors(
     gt_class_pos = anc_classes[pos_anc_idxs]
 
     # Expand and flat anchors to iterate with gotten positive indexes
-    anc_boxes_all_expand = (anc_boxes_all[None, ...]
-                            .expand(b_size, anchors_per_img, 4)
-                            .flatten(end_dim=1))
-    pos_ancs = anc_boxes_all_expand[pos_anc_idxs]
+    anc_boxes_all_flat = anc_boxes_all.flatten(end_dim=1)
+    pos_ancs = anc_boxes_all_flat[pos_anc_idxs]
     
     # Expand gt boxes to map every anchor
     gt_boxes_expand = gt_boxes[:, None, ...].expand(
@@ -454,7 +455,7 @@ def get_required_anchors(
                       neg_anc_idxs.shape[0],
                       (pos_anc_idxs.shape[0],))]
     # Get negative anchors
-    neg_ancs = anc_boxes_all_expand[neg_anc_idxs]
+    neg_ancs = anc_boxes_all_flat[neg_anc_idxs]
 
     return (pos_anc_idxs, neg_anc_idxs, pos_b_idxs, pos_ancs, neg_ancs,
             pos_anc_conf_scores, gt_class_pos, gt_offsets)
