@@ -1,8 +1,6 @@
 from pathlib import Path
-from typing import Tuple
 
 import torch
-from torch import Tensor
 import torchvision
 from torch.utils.data import DataLoader
 
@@ -52,9 +50,9 @@ def main():
         gt_boxes.reshape(-1, 4), width_scale_factor,
         height_scale_factor, 'p2a').reshape(gt_boxes.shape)
 
-    positive_anc_ind, negative_anc_ind, GT_conf_scores, \
-    GT_offsets, GT_class_pos, positive_anc_coords, \
-    negative_anc_coords, positive_anc_ind_sep = get_required_anchors(
+    (pos_anc_idxs, neg_anc_idxs, pos_b_idxs,
+     pos_ancs, neg_ancs, pos_anc_conf_scores,
+     gt_class_pos, gt_offsets) = rcnn_utils.get_required_anchors(
         all_anc_bboxes.reshape(b, -1, 4), projected_gt, classes)
     print()
 
