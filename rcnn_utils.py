@@ -1,12 +1,11 @@
-"""
-A module that contain functions that help to work with RCNN.
-"""
+"""A module that contain functions that help to work with RCNN."""
 
 
 from typing import Tuple, Union, Dict, Optional, List
 
 import numpy as np
 import torch
+from torch import Tensor
 import torchvision
 import matplotlib.pyplot as plt
 from matplotlib import patches
@@ -14,8 +13,8 @@ from matplotlib import patches
 
 def draw_bounding_boxes(
     ax: plt.Axes,
-    bboxes: torch.Tensor,
-    labels: Optional[torch.Tensor] = None,
+    bboxes: Tensor,
+    labels: Optional[Tensor] = None,
     index2name: Optional[Dict[int, str]] = None,
     line_width: Optional[int] = 2
 ) -> plt.Axes:
@@ -26,9 +25,9 @@ def draw_bounding_boxes(
     ----------
     ax : plt.Axes
         Axes with a sample image.
-    bboxes : torch.Tensor
+    bboxes : Tensor
         A tensor with shape `[N_bboxes, 4]` that contains the bounding boxes.
-    labels : Optional[torch.Tensor]
+    labels : Optional[Tensor]
         Labels that correspond the bounding boxes.
     index2name : Optional[Dict[int, str]]
         A converter dict from int labels to names.
@@ -60,7 +59,7 @@ def draw_bounding_boxes(
 
 def generate_anchors(
         map_size: Tuple[int, int]
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[Tensor, Tensor]:
     """
     Generate anchor points on a feature map.
 
@@ -85,8 +84,8 @@ def generate_anchors(
 
 
 def show_anchors(
-    x_points: Union[torch.Tensor, np.ndarray],
-    y_points: Union[torch.Tensor, np.ndarray],
+    x_points: Union[Tensor, np.ndarray],
+    y_points: Union[Tensor, np.ndarray],
     ax: plt.Axes,
     special_point: Optional[Tuple[int, int]] = None
 ) -> plt.Axes:
@@ -94,9 +93,9 @@ def show_anchors(
 
     Parameters
     ----------
-    x_points : Union[torch.Tensor, np.ndarray]
+    x_points : Union[Tensor, np.ndarray]
         X coordinates for anchor points.
-    y_points : Union[torch.Tensor, np.ndarray]
+    y_points : Union[Tensor, np.ndarray]
         Y coordinates for anchor points.
     ax : plt.Axes
         Axes for showing.
@@ -119,12 +118,12 @@ def show_anchors(
 
 
 def generate_anchor_boxes(
-    x_anchors: torch.Tensor,
-    y_anchors: torch.Tensor,
-    anc_scales: Union[List[float], torch.Tensor],
-    anc_ratios: Union[List[float], torch.Tensor],
+    x_anchors: Tensor,
+    y_anchors: Tensor,
+    anc_scales: Union[List[float], Tensor],
+    anc_ratios: Union[List[float], Tensor],
     map_size: Tuple[int, int]
-) -> torch.Tensor:
+) -> Tensor:
     """Create anchor boxes.
 
     Generate tensor with shape `[Hmap, Wmap, n_anchor_boxes, 4]`
@@ -144,26 +143,26 @@ def generate_anchor_boxes(
 
     Parameters
     ----------
-    x_anchors : torch.Tensor
+    x_anchors : Tensor
         X coordinates of the anchors.
-    y_anchors : torch.Tensor
+    y_anchors : Tensor
         Y coordinates of the anchors.
-    anc_scales : Union[List[float], torch.Tensor]
+    anc_scales : Union[List[float], Tensor]
         The scales for boxes.
-    anc_ratios : Union[List[float], torch.Tensor]
+    anc_ratios : Union[List[float], Tensor]
         The ratios for boxes.
     map_size : Tuple[int, int]
         A size of the map.
 
     Returns
     -------
-    torch.Tensor
+    Tensor
         The generated bounding boxes.
     """
     if isinstance(anc_scales, list):
-        anc_scales = torch.Tensor(anc_scales)
+        anc_scales = torch.tensor(anc_scales)
     if isinstance(anc_ratios, list):
-        anc_ratios = torch.Tensor(anc_ratios)
+        anc_ratios = torch.tensor(anc_ratios)
 
     scales = anc_scales.repeat(len(anc_ratios), 1).T.reshape(-1)
     ratios = anc_ratios.repeat(len(anc_scales))
@@ -203,16 +202,16 @@ def generate_anchor_boxes(
 
 
 def project_bboxes(
-    bboxes: torch.Tensor,
+    bboxes: Tensor,
     width_scale_factor: float,
     height_scale_factor: float,
     mode='a2p'
-) -> torch.Tensor:
+) -> Tensor:
     """Project bounding boxes to a defined scaled space.
 
     Parameters
     ----------
-    bboxes : torch.Tensor
+    bboxes : Tensor
         A tensor with shape `[n_bboxes, 4]` that contains bounding boxes.
     width_scale_factor : float
         A scale factor across a width.
@@ -225,7 +224,7 @@ def project_bboxes(
 
     Returns
     -------
-    torch.Tensor
+    Tensor
         The projected bounding boxes with shape `[n_bboxes, 4]`.
 
     Raises
@@ -254,22 +253,22 @@ def project_bboxes(
 
 
 def anc_gt_iou(
-    anc_boxes_grid: torch.Tensor, gt_boxes: torch.Tensor
-) -> torch.Tensor:
+    anc_boxes_grid: Tensor, gt_boxes: Tensor
+) -> Tensor:
     """
     Calculate intersection over union between anchor boxes and batch of
     ground truth boxes.
 
     Parameters
     ----------
-    anc_boxes_all : torch.Tensor
+    anc_boxes_all : Tensor
         A grid of the anchor boxes with a shape `[n_boxes, 4]`.
-    gt_boxes : torch.Tensor
+    gt_boxes : Tensor
         The ground truth boxes with a shape `[B, m_boxes, 4]`.
 
     Returns
     -------
-    torch.Tensor
+    Tensor
         IoU tensor with shape `[B, n_boxes, m_boxes]`.
 
     Raises
