@@ -5,6 +5,7 @@ import torchvision
 from torch.utils.data import DataLoader
 
 import rcnn_utils
+import rcnn_model
 
 from object_detection_dataset import ObjectDetectionDataset
 
@@ -54,7 +55,9 @@ def main():
      pos_ancs, neg_ancs, pos_anc_conf_scores,
      gt_class_pos, gt_offsets) = rcnn_utils.get_required_anchors(
         all_anc_bboxes.reshape(b, -1, 4), projected_gt, classes)
-    print()
+    
+    proposal_module = rcnn_model.ProposalModule(out_c)
+    proposal_module(backbone_out, pos_anc_idxs, neg_anc_idxs, pos_ancs)
 
 
 if __name__ == '__main__':
