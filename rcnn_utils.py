@@ -305,8 +305,7 @@ def calculate_gt_offsets(
     positive_anchors: Tensor,
     gt_bboxes: Tensor
 ) -> Tensor:
-    """
-    Calculate offsets between selected anchors and corresponding gt bboxes.
+    """Calculate offsets between selected anchors and corresponding gt bboxes.
 
     Offsets are:
     1) dxc = (gt_cx - anc_cx) / anc_w
@@ -314,14 +313,17 @@ def calculate_gt_offsets(
     3) dw = log(gt_w / anc_w)
     4) dh = log(gt_h / anc_h)
 
-    Args:
-        positive_anchors (Tensor): The positive anchors with shape
-        `[n_anc, 4]` in xyxy system.
-        gt_bboxes (Tensor): Ground truth bounding boxes with shape
-        `[n_anc, 4]` in xyxy system.
+    Parameters
+    ----------
+    positive_anchors : Tensor
+        The positive anchors in xyxy system with shape `[n_anc, 4]`.
+    gt_bboxes : Tensor
+        Ground truth bounding boxes in xyxy system with shape `[n_anc, 4]`.
 
-    Returns:
-        Tensor: The offsets with shape `[]`
+    Returns
+    -------
+    Tensor
+        The offsets with shape `[n_pos_anc, 4]`.
     """
     positive_anchors = torchvision.ops.box_convert(
         positive_anchors, 'xyxy', 'cxcywh')
@@ -364,12 +366,12 @@ def get_required_anchors(
     Parameters
     ----------
     anc_boxes_all : Tensor
-        All anchor boxes with shape `(b, n_anc_per_img, 4)`.
+        All anchor boxes with shape `[b, n_anc_per_img, 4]`.
     gt_boxes : Tensor
-        Ground truth bounding boxes with shape `(b, n_max_obj, 4)`.
+        Ground truth bounding boxes with shape `[b, n_max_obj, 4]`.
     gt_classes : Tensor
         Classes corresponding the given ground truth boxes
-        with shape `(b, n_max_obj)`.
+        with shape `[b, n_max_obj]`.
     pos_thresh : float, optional
         Confidence threshold for positive anchor boxes. By default is 0.7.
     neg_thresh : float, optional
