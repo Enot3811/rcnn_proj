@@ -1,7 +1,7 @@
 """A module that contain functions that help to work with RCNN."""
 
 
-from typing import Tuple, Union, Dict, Optional, List
+from typing import Iterable, Tuple, Union, Dict, Optional
 
 import numpy as np
 import torch
@@ -63,8 +63,7 @@ def draw_bounding_boxes(
 def generate_anchors(
         map_size: Tuple[int, int]
 ) -> Tuple[Tensor, Tensor]:
-    """
-    Generate anchor points on a feature map.
+    """Generate anchor points on a feature map.
 
     Anchor points located between feature map pixels.
 
@@ -123,8 +122,8 @@ def show_anchors(
 def generate_anchor_boxes(
     x_anchors: Tensor,
     y_anchors: Tensor,
-    anc_scales: Union[List[float], Tensor],
-    anc_ratios: Union[List[float], Tensor],
+    anc_scales: Union[Iterable[float], Tensor],
+    anc_ratios: Union[Iterable[float], Tensor],
     map_size: Tuple[int, int]
 ) -> Tensor:
     """Create anchor boxes.
@@ -150,9 +149,9 @@ def generate_anchor_boxes(
         X coordinates of the anchors.
     y_anchors : Tensor
         Y coordinates of the anchors.
-    anc_scales : Union[List[float], Tensor]
+    anc_scales : Union[Iterable[float], Tensor]
         The scales for boxes.
-    anc_ratios : Union[List[float], Tensor]
+    anc_ratios : Union[Iterable[float], Tensor]
         The ratios for boxes.
     map_size : Tuple[int, int]
         A size of the map.
@@ -160,17 +159,16 @@ def generate_anchor_boxes(
     Returns
     -------
     Tensor
-        The generated bounding boxes.
+        The generated bounding boxes with shape
+        `[n_scales * n_ratios, h_n_anc, w_n_anc, 4]`.
     """
-    if isinstance(anc_scales, list):
+    if isinstance(anc_scales, (list, tuple)):
         anc_scales = torch.tensor(anc_scales)
-    if isinstance(anc_ratios, list):
+    if isinstance(anc_ratios, (list, tuple)):
         anc_ratios = torch.tensor(anc_ratios)
 
     scales = anc_scales.repeat(len(anc_ratios), 1).T.reshape(-1)
     ratios = anc_ratios.repeat(len(anc_scales))
-
-    assert len(scales) == len(ratios)
 
     x_biases = scales * ratios / 2
     y_biases = scales / 2
