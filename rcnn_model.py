@@ -3,6 +3,7 @@
 from typing import Tuple
 
 import torch
+from torch import Tensor
 import torch.nn as nn
 import torchvision
 import torchvision.ops as ops
@@ -22,17 +23,17 @@ class FeatureExtractor(nn.Module):
         for param in self.backbone.parameters():
             param.requires_grad = True
 
-    def forward(self, input_data: torch.Tensor) -> torch.Tensor:
+    def forward(self, input_data: Tensor) -> Tensor:
         """Pass through backbone feature extractor.
 
         Parameters
         ----------
-        input_data : torch.Tensor
+        input_data : Tensor
             An input image.
 
         Returns
         -------
-        torch.Tensor
+        Tensor
             A feature map.
         """
         return self.backbone(input_data)
@@ -96,17 +97,17 @@ class ProposalModule(nn.Module):
 
         Parameters
         ----------
-        feature_maps : torch.Tensor
+        feature_maps : Tensor
             A feature map tensor with shape `[b, n_channels, map_h, map_w]`.
-        pos_anc_idxs : torch.Tensor, optional
+        pos_anc_idxs : Tensor, optional
             Indexes of positive anchor boxes when tensor is flatten.
             Shape is `[n_pos_anc,]`.
             By default is `None`, but during train must be given.
-        neg_anc_idxs : torch.Tensor, optional
+        neg_anc_idxs : Tensor, optional
             Indexes of negative anchor boxes when tensor is flatten.
             Shape is `[n_pos_anc,]`.
             By default is `None`, but during train must be given.
-        pos_ancs : torch.Tensor, optional
+        pos_ancs : Tensor, optional
             Positive anchors with shape `[n_pos_anc, 4]`.
             By default is `None`, but during train must be given.
 
@@ -124,8 +125,8 @@ class ProposalModule(nn.Module):
         x = self.hidden_conv(feature_maps)
         x = self.relu(x)
         x = self.dropout(x)
-        conf_pred: torch.Tensor = self.conf_head(x)
-        offsets_pred: torch.Tensor = self.reg_head(x)
+        conf_pred: Tensor = self.conf_head(x)
+        offsets_pred: Tensor = self.reg_head(x)
 
         mode = ('eval' if (pos_anc_idxs is None or neg_anc_idxs is None or
                            pos_ancs is None)
@@ -149,23 +150,23 @@ class ProposalModule(nn.Module):
 
     def _generate_proposals(
         self,
-        anchors: torch.Tensor,
-        offsets: torch.Tensor
-    ) -> torch.Tensor:
+        anchors: Tensor,
+        offsets: Tensor
+    ) -> Tensor:
         """Generate proposals with anchor boxes and its offsets.
 
         Get anchors and apply offsets to them.
 
         Parameters
         ----------
-        anchors : torch.Tensor
+        anchors : Tensor
             The anchor boxes with shape `[n_anc, 4]`.
-        offsets : torch.Tensor
+        offsets : Tensor
             The offsets with shape `[n_anc, 4]`.
 
         Returns
         -------
-        torch.Tensor
+        Tensor
             The anchor boxes shifted by the offsets with shape `[n_anc, 4]`.
         """
         anchors = ops.box_convert(anchors, 'xyxy', 'cxcywh')
