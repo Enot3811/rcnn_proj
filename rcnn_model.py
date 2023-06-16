@@ -112,10 +112,14 @@ class ProposalModule(nn.Module):
 
         Returns
         -------
-        Tuple[torch.Tensor, torch.Tensor]
-            The object confidence for every anchor box with shape
-            `[b, n_anc_box, map_h, map_w]` and the offsets with shape
-            `[b, n_anc_box * 4, map_h, map_w]`.
+        Union[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor, Tensor]]
+            When evaluate mode return the object confidence for every anchor
+            box with shape `[b, n_anc_box, map_h, map_w]` and the offsets with
+            shape `[b, n_anc_box * 4, map_h, map_w]`.
+            When train mode return the positive and negative object confidence
+            separately, with shape `[n_pos_anc,]` and `[n_neg_anc,]`, offsets
+            of positive anchors with shape `[n_pos_anc, 4]`,
+            proposals of network with shape `[n_pos_anc, 4]`.
         """
         x = self.hidden_conv(feature_maps)
         x = self.relu(x)
