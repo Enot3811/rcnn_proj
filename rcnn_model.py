@@ -8,6 +8,10 @@ import torch.nn as nn
 import torchvision
 import torchvision.ops as ops
 
+from rcnn_utils import (
+    generate_anchors, get_required_anchors, generate_anchor_boxes,
+    project_bboxes)
+
 
 class FeatureExtractor(nn.Module):
     """Feature extractor backbone."""
@@ -178,3 +182,88 @@ class ProposalModule(nn.Module):
 
         proposals = ops.box_convert(proposals, 'cxcywh', 'xyxy')
         return proposals
+
+
+class RegionProposalNetwork(nn.Module):
+
+    def __init__(
+        self,
+        input_size: Tuple[int, int],
+        out_size: Tuple[int, int],
+        out_channels: int,
+        anc_scales: Iterable[float] = (2.0, 4.0, 6.0),
+        anc_ratios: Iterable[float] = (0.5, 1.0, 1.5),
+        pos_anc_thresh: float = 0.7,
+        neg_anc_thresh: float = 0.3,
+        w_conf: float = 1.0,
+        w_reg: float = 5.0,
+        *args, **kwargs
+    ) -> None:
+        # TODO write docstring
+        super().__init__(*args, **kwargs)
+        self.feature_extractor = FeatureExtractor()
+        self.proposal_module = ProposalModule(
+            out_channels, len(anc_scales) * len(anc_ratios))
+
+        self.pos_anc_thresh = pos_anc_thresh
+        self.neg_anc_thresh = neg_anc_thresh
+
+        self.height_scale = input_size[0] // out_size[0]
+        self.width_scale = input_size[1] // out_size[1]
+
+        x_anc_pts, y_anc_pts = generate_anchors(out_size)
+        self.anchor_grid = generate_anchor_boxes(
+            x_anc_pts, y_anc_pts, anc_scales, anc_ratios, out_size)
+
+
+    def forward(self, input_batch: Tensor):
+        # TODO Complete development
+        # TODO Write docs
+        images, gt_boxes, gt_cls = input_batch
+        b_size = gt_cls.shape[0]
+        batch_anc_grid = self.anchor_grid.repeat((b_size, 1, 1, 1, 1))
+
+        gt_boxes_map = project_bboxes(
+            gt_boxes, self.width_scale, self.height_scale, 'p2a')
+
+        feature_maps = self.feature_extractor(images)
+
+        (pos_anc_idxs, neg_anc_idxs, pos_b_idxs,
+         pos_ancs, neg_ancs, pos_anc_conf_scores,
+         gt_class_pos, gt_offsets) = get_required_anchors(
+            batch_anc_grid, gt_boxes_map, gt_cls,
+            self.pos_anc_thresh, self.neg_anc_thresh)
+
+        pos_conf, neg_conf, pos_offsets, proposals = self.proposal_module(
+            feature_maps, pos_anc_idxs, neg_anc_idxs, pos_ancs)
+        
+    
+def bbox_reg_loss(
+    predicted_offsets: Tensor, gt_offsets: Tensor, b_size: int
+) -> Tensor:
+    """Calculate bounding boxes regression loss.
+
+    Loss is calculated as l1 distance between the predicted offsets
+    and the ground truth, divided by batch size.
+
+    Parameters
+    ----------
+    predicted_offsets : Tensor
+        Predicted offsets with shape `[n_pred_pos_anc, 4]`.
+    gt_offsets : Tensor
+        Ground truth offsets with shape `[n_pred_pos_anc, 4]`.
+    b_size : int
+        Batch size.
+
+    Returns
+    -------
+    Tensor
+        Calculated regression loss.
+    """
+    # TODO Figure out smooth l1 loss
+    pass
+
+
+def cls_loss():
+    pass
+    # TODO develope this loss
