@@ -1,6 +1,6 @@
 """A module that contains RCNN model class."""
 
-from typing import Tuple
+from typing import Tuple, Iterable, Union
 
 import torch
 from torch import Tensor
@@ -81,11 +81,11 @@ class ProposalModule(nn.Module):
 
     def forward(
         self,
-        feature_maps: torch.Tensor,
-        pos_anc_idxs: torch.Tensor = None,
-        neg_anc_idxs: torch.Tensor = None,
-        pos_ancs: torch.Tensor = None
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        feature_maps: Tensor,
+        pos_anc_idxs: Tensor = None,
+        neg_anc_idxs: Tensor = None,
+        pos_ancs: Tensor = None
+    ) -> Union[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor, Tensor]]:
         """Get object confidence and offsets prediction.
         
         It has train and evaluation mode.
