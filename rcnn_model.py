@@ -129,7 +129,7 @@ class ProposalModule(nn.Module):
             neg_conf = conf_pred.permute(0, 2, 3, 1).flatten()[neg_anc_idxs]
 
             pos_offsets = (offsets_pred.permute(0, 2, 3, 1)
-                           .view(-1, 4).contiguous())[pos_anc_idxs]
+                           .contiguous().view(-1, 4))[pos_anc_idxs]
             
             proposals = self._generate_proposals(pos_ancs, pos_offsets)
 
