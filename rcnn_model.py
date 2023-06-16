@@ -99,11 +99,16 @@ class ProposalModule(nn.Module):
         feature_maps : torch.Tensor
             A feature map tensor with shape `[b, n_channels, map_h, map_w]`.
         pos_anc_idxs : torch.Tensor, optional
-            Indexes, by default None
+            Indexes of positive anchor boxes when tensor is flatten.
+            Shape is `[n_pos_anc,]`.
+            By default is `None`, but during train must be given.
         neg_anc_idxs : torch.Tensor, optional
-            _description_, by default None
+            Indexes of negative anchor boxes when tensor is flatten.
+            Shape is `[n_pos_anc,]`.
+            By default is `None`, but during train must be given.
         pos_ancs : torch.Tensor, optional
-            _description_, by default None
+            Positive anchors with shape `[n_pos_anc, 4]`.
+            By default is `None`, but during train must be given.
 
         Returns
         -------
@@ -112,7 +117,6 @@ class ProposalModule(nn.Module):
             `[b, n_anc_box, map_h, map_w]` and the offsets with shape
             `[b, n_anc_box * 4, map_h, map_w]`.
         """
-        # TODO wright docs
         x = self.hidden_conv(feature_maps)
         x = self.relu(x)
         x = self.dropout(x)
@@ -124,7 +128,6 @@ class ProposalModule(nn.Module):
                 else 'train')
         
         if mode == 'train':
-            # TODO check rightness of permute
             pos_conf = conf_pred.permute(0, 2, 3, 1).flatten()[pos_anc_idxs]
             neg_conf = conf_pred.permute(0, 2, 3, 1).flatten()[neg_anc_idxs]
 
