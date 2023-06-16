@@ -150,6 +150,8 @@ class ProposalModule(nn.Module):
     ) -> torch.Tensor:
         """Generate proposals with anchor boxes and its offsets.
 
+        Get anchors and apply offsets to them.
+
         Parameters
         ----------
         anchors : torch.Tensor
