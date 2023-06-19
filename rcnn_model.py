@@ -243,7 +243,7 @@ def bbox_reg_loss(
 ) -> Tensor:
     """Calculate bounding boxes regression loss.
 
-    Loss is calculated as l1 distance between the predicted offsets
+    Loss is calculated as smooth l1 distance between the predicted offsets
     and the ground truth, divided by batch size.
 
     Parameters
@@ -260,8 +260,9 @@ def bbox_reg_loss(
     Tensor
         Calculated regression loss.
     """
-    # TODO Figure out smooth l1 loss
-    pass
+    return F.smooth_l1_loss(
+        predicted_offsets, gt_offsets, reduction='sum') / b_size
+    
 
 
 def cls_loss():
