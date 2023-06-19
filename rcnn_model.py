@@ -4,6 +4,7 @@ from typing import Tuple, Iterable, Union
 
 import torch
 from torch import Tensor
+import torch.nn.functional as F
 import torch.nn as nn
 import torchvision
 import torchvision.ops as ops
@@ -264,7 +265,34 @@ def bbox_reg_loss(
         predicted_offsets, gt_offsets, reduction='sum') / b_size
     
 
+def confidence_loss(
+    conf_scores_pos: Tensor,
+    conf_scores_neg: Tensor,
+    b_size: int
+) -> Tensor:
+    """Calculate object confidence loss.
 
-def cls_loss():
-    pass
-    # TODO develope this loss
+    Loss is represented as binary cross entropy loss calculated by positive and
+    negative anchors' confidences and corresponding ones
+    and zeros ground truth.
+
+    Parameters
+    ----------
+    conf_scores_pos : Tensor
+        Predicted confidence scores of predicted positive anchors.
+    conf_score_neg : Tensor
+        Predicted confidence scores of selected negative anchors.
+    b_size : int
+        Batch size.
+
+    Returns
+    -------
+    Tensor
+        Calculated confidence loss.
+    """
+    gt_pos = torch.ones_like(conf_scores_pos)
+    gt_neg = torch.zeros_like(conf_scores_neg)
+    gt_scores = torch.cat((gt_pos, gt_neg))
+    predicted_scores = torch.cat((conf_scores_pos, conf_scores_neg))
+    return F.binary_cross_entropy_with_logits(
+        predicted_scores, gt_scores, reduction='sum') / b_size
