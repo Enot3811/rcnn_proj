@@ -212,6 +212,9 @@ class RegionProposalNetwork(nn.Module):
         self.height_scale = input_size[0] // out_size[0]
         self.width_scale = input_size[1] // out_size[1]
 
+        self.w_conf = w_conf
+        self.w_reg = w_reg
+
         x_anc_pts, y_anc_pts = generate_anchors(out_size)
         self.anchor_grid = generate_anchor_boxes(
             x_anc_pts, y_anc_pts, anc_scales, anc_ratios, out_size)
@@ -237,6 +240,42 @@ class RegionProposalNetwork(nn.Module):
 
         pos_conf, neg_conf, pos_offsets, proposals = self.proposal_module(
             feature_maps, pos_anc_idxs, neg_anc_idxs, pos_ancs)
+        
+    def loss(
+        self,
+        pos_conf: Tensor,
+        neg_conf: Tensor,
+        pos_offsets: Tensor,
+        gt_offsets: Tensor,
+        b_size: int
+    ) -> Tensor:
+        """Calculate region proposal network's loss.
+
+        RPN loss is a weighted sum of object confidence
+        and bounding box offsets regression losses.
+
+        Parameters
+        ----------
+        pos_conf : Tensor
+            Confidence scores of predicted positive anchors.
+        neg_conf : Tensor
+            Confidence scores of gotten negative anchors.
+        pos_offsets : Tensor
+            Predicted offsets for positive anchors.
+        gt_offsets : Tensor
+            Ground truth offsets for positive anchors.
+        b_size : int
+            Batch size.
+
+        Returns
+        -------
+        Tensor
+            Calculated RPN loss.
+        """
+        reg_loss = bbox_reg_loss(pos_offsets, gt_offsets, b_size)
+        conf_loss = confidence_loss(pos_conf, neg_conf, b_size)
+        total_rpn_loss = self.w_reg * reg_loss + self.w_conf * conf_loss
+        return total_rpn_loss
         
     
 def bbox_reg_loss(
