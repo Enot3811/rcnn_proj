@@ -219,10 +219,33 @@ class RegionProposalNetwork(nn.Module):
         self.anchor_grid = generate_anchor_boxes(
             x_anc_pts, y_anc_pts, anc_scales, anc_ratios, out_size)
 
+    def forward(
+        self,
+        input_batch: Tensor
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+        """Forward pass of the region proposal network.
 
-    def forward(self, input_batch: Tensor):
-        # TODO Complete development
-        # TODO Write docs
+        A given image pass through the backbone network,
+        and feature map is gotten.
+        Then this feature map is used for creating bounding boxes proposals.
+
+        Parameters
+        ----------
+        input_batch : Tensor
+            An input batch of images with shape `[b, c, h, w]`.
+
+        Returns
+        -------
+        Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]
+            Calculated RPN loss,
+            feature map with shape `[out_channels, out_size[0], out_size[1]]`,
+            region proposals with shape `[n_pred_pos_anc, 4]` in format "xyxy",
+            batch indexes of predicted positive anchors
+            with shape `[n_pred_pos_anc,]`
+            and ground truth classes of predicted positive anchors
+            with shape `[n_pred_pos_anc,]`.
+        """
+        # TODO Think about separate train and evaluation forward
         images, gt_boxes, gt_cls = input_batch
         b_size = gt_cls.shape[0]
         batch_anc_grid = self.anchor_grid.repeat((b_size, 1, 1, 1, 1))
@@ -241,6 +264,10 @@ class RegionProposalNetwork(nn.Module):
         pos_conf, neg_conf, pos_offsets, proposals = self.proposal_module(
             feature_maps, pos_anc_idxs, neg_anc_idxs, pos_ancs)
         
+        rpn_loss = self.loss(pos_conf, neg_conf, pos_offsets, gt_offsets)
+
+        return rpn_loss, feature_maps, proposals, pos_b_idxs, gt_class_pos
+
     def loss(
         self,
         pos_conf: Tensor,
