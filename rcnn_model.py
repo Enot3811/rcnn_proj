@@ -21,6 +21,7 @@ class FeatureExtractor(nn.Module):
         super().__init__(*args, **kwargs)
         
         # Get pretrained backbone
+        # TODO think about optional backbone replacing
         resnet = torchvision.models.resnet50(
             weights=torchvision.models.ResNet50_Weights.DEFAULT)
         self.backbone = torch.nn.Sequential(*list(resnet.children())[:8])
@@ -186,6 +187,12 @@ class ProposalModule(nn.Module):
 
 
 class RegionProposalNetwork(nn.Module):
+    """Region proposal network.
+
+    It includes a `FeatureExtractor` backbone
+    that is used for feature map extracting
+    and a `ProposalModule` for bounding boxes generating.
+    """
 
     def __init__(
         self,
@@ -200,7 +207,34 @@ class RegionProposalNetwork(nn.Module):
         w_reg: float = 5.0,
         *args, **kwargs
     ) -> None:
-        # TODO write docstring
+        """Initialize RPN.
+
+        Parameters
+        ----------
+        input_size : Tuple[int, int]
+            Input images' size.
+        out_size : Tuple[int, int]
+            Expected size of backbone feature map.
+        out_channels : int
+            Expected number of backbone feature map channels.
+        anc_scales : Iterable[float], optional
+            Scale factors of anchor bounding boxes.
+            By default is (2.0, 4.0, 6.0).
+        anc_ratios : Iterable[float], optional
+            Ratio factors of anchor bounding boxes sides.
+            By default is (0.5, 1.0, 1.5).
+        pos_anc_thresh : float, optional
+            A confidence threshold for positive anchors selecting.
+            By default is 0.7.
+        neg_anc_thresh : float, optional
+            A confidence threshold for negative anchors selecting.
+            By default is 0.3.
+        w_conf : float, optional
+            Weight coefficient for confidence loss. By default is 1.0.
+        w_reg : float, optional
+            Weight coefficient for predicted offsets regression loss.
+            By default is 1.0.
+        """
         super().__init__(*args, **kwargs)
         self.feature_extractor = FeatureExtractor()
         self.proposal_module = ProposalModule(
@@ -228,6 +262,7 @@ class RegionProposalNetwork(nn.Module):
         A given image pass through the backbone network,
         and feature map is gotten.
         Then this feature map is used for creating bounding boxes proposals.
+        Basing on gotten proposals RPN loss will be calculated.
 
         Parameters
         ----------
