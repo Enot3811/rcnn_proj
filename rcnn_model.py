@@ -470,7 +470,66 @@ class ClassificationModule(nn.Module):
         # Train
         else:
             return cls_scores, F.cross_entropy(cls_scores, gt_cls.long())
-        
 
 
 # TODO implement two stage detector
+class RCNN_Detector(nn.Module):
+    def __init__(
+        self,
+        input_size: Tuple[int, int],
+        backbone_out_size: Tuple[int, int],
+        backbone_out_channels: int,
+        n_cls: int,
+        roi_size,
+        anc_scales: Iterable[float] = (2, 4, 6),
+        anc_ratios: Iterable[float] = (0.5, 1, 1.5),
+        pos_anc_thresh: float = 0.7,
+        neg_anc_thresh: float = 0.3,
+        w_conf_loss: float = 1,
+        w_reg_loss: float = 5,
+        classifier_hid_dim: int = 512,
+        classifier_p_dropout: float = 0.3
+    ) -> None:
+        """ TODO write docs
+
+        Parameters
+        ----------
+        input_size : Tuple[int, int]
+            _description_
+        backbone_out_size : Tuple[int, int]
+            _description_
+        backbone_out_channels : int
+            _description_
+        n_cls : int
+            _description_
+        roi_size : _type_
+            _description_
+        anc_scales : Iterable[float], optional
+            _description_, by default (2, 4, 6)
+        anc_ratios : Iterable[float], optional
+            _description_, by default (0.5, 1, 1.5)
+        pos_anc_thresh : float, optional
+            _description_, by default 0.7
+        neg_anc_thresh : float, optional
+            _description_, by default 0.3
+        w_conf_loss : float, optional
+            _description_, by default 1
+        w_reg_loss : float, optional
+            _description_, by default 5
+        classifier_hid_dim : int, optional
+            _description_, by default 512
+        classifier_p_dropout : float, optional
+            _description_, by default 0.3
+        """
+        super().__init__()
+        self.rpn = RegionProposalNetwork(
+            input_size, backbone_out_size, backbone_out_channels, anc_scales,
+            anc_ratios, pos_anc_thresh, neg_anc_thresh, w_conf_loss, w_reg_loss
+        )
+        self.classifier = ClassificationModule(
+            backbone_out_channels, n_cls, roi_size, classifier_hid_dim,
+            classifier_p_dropout)
+
+    def forward(self, images: Tensor):
+        # TODO implement forward pass
+        self.rpn()
