@@ -1,6 +1,6 @@
 """A module that contains RCNN model class."""
 
-from typing import Tuple, Iterable, Union
+from typing import Tuple, Iterable, Union, List
 
 import torch
 from torch import Tensor
@@ -397,3 +397,83 @@ def confidence_loss(
     predicted_scores = torch.cat((conf_scores_pos, conf_scores_neg))
     return F.binary_cross_entropy_with_logits(
         predicted_scores, gt_scores, reduction='sum') / b_size
+
+
+class ClassificationModule(nn.Module):
+    def __init__(
+        self,
+        out_channels: int,
+        n_cls: int,
+        roi_size: Tuple[int, int],
+        hidden_dim: int = 512,
+        p_dropout: float = 0.3,
+        *args, **kwargs
+    ) -> None:
+        """Initialize ClassificationModule.
+
+        Parameters
+        ----------
+        out_channels : int
+            An expected number of channels of a backbone's feature map.
+        n_cls : int
+            A number of classes.
+        roi_size : Tuple[int, int]
+            Size of ROI pool.
+        hidden_dim : int, optional
+            Hidden dimension, by default is 512.
+        p_dropout : float, optional
+            Dropout's probability, by default is 0.3.
+        """
+        super().__init__(*args, **kwargs)
+        self.roi_size = roi_size
+        self.avg_pool = nn.AvgPool2d(roi_size)
+        self.fc = nn.Linear(out_channels, hidden_dim)
+        self.dropout = nn.Dropout(p_dropout)
+        self.cls_head = nn.Linear(hidden_dim, n_cls)
+
+    def forward(
+        self,
+        feature_maps: Tensor,
+        predicted_proposals: List[Tensor],
+        gt_cls: Tensor = None
+    ) -> Union[Tensor, Tuple[Tensor]]:
+        """Classify predicted proposals.
+
+        Calculate class scores for the given proposals.
+        If ground truth classes is given
+        then calculate categorical cross entropy loss additionally.
+
+        Parameters
+        ----------
+        predicted_proposals : Tensor
+            Feature map from RPN's backbone.
+            It has shape `[b, out_channels, out_size_h, out_size_w]`.
+        predicted_proposals : Tensor
+            Predicted proposals from RPN.
+            List has length `n_pos_anc` and each element has shape `[4,]`.
+        gt_cls : Tensor, optional
+            Ground truth classes with shape `[n_pos_anc,]`.
+            If given then loss calculating will be done.
+
+        Returns
+        -------
+        Union[Tensor, Tuple[Tensor]]
+            Class scores with shape `[n_pos_anc]'
+            and class loss with shape `[n_cls]` if ground truth are given.
+        """
+        x = ops.roi_pool(feature_maps, predicted_proposals, self.roi_size)
+        x = self.avg_pool(x)
+        x = self.fc(x)
+        x = self.dropout(x)
+        cls_scores = self.cls_head(x)
+
+        # Inference
+        if gt_cls is None:
+            return cls_scores
+        # Train
+        else:
+            return cls_scores, F.cross_entropy(cls_scores, gt_cls.long())
+        
+
+
+# TODO implement two stage detector
