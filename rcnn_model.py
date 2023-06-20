@@ -17,8 +17,8 @@ from rcnn_utils import (
 class FeatureExtractor(nn.Module):
     """Feature extractor backbone."""
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self) -> None:
+        super().__init__()
         
         # Get pretrained backbone
         # TODO think about optional backbone replacing
@@ -60,8 +60,7 @@ class ProposalModule(nn.Module):
         in_features: int,
         hidden_dim: int = 512,
         n_anchors: int = 9,
-        p_dropout: float = 0.3,
-        *args, **kwargs
+        p_dropout: float = 0.3
     ) -> None:
         """Initialize ProposalModule
 
@@ -76,7 +75,7 @@ class ProposalModule(nn.Module):
         p_dropout : float, optional
             A dropout probability. By default is 0.3.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.hidden_conv = nn.Conv2d(
             in_features, hidden_dim, kernel_size=3, padding=1)
         self.relu = nn.ReLU(inplace=True)
@@ -204,8 +203,7 @@ class RegionProposalNetwork(nn.Module):
         pos_anc_thresh: float = 0.7,
         neg_anc_thresh: float = 0.3,
         w_conf: float = 1.0,
-        w_reg: float = 5.0,
-        *args, **kwargs
+        w_reg: float = 5.0
     ) -> None:
         """Initialize RPN.
 
@@ -235,7 +233,7 @@ class RegionProposalNetwork(nn.Module):
             Weight coefficient for predicted offsets regression loss.
             By default is 1.0.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.feature_extractor = FeatureExtractor()
         self.proposal_module = ProposalModule(
             out_channels, len(anc_scales) * len(anc_ratios))
@@ -406,8 +404,7 @@ class ClassificationModule(nn.Module):
         n_cls: int,
         roi_size: Tuple[int, int],
         hidden_dim: int = 512,
-        p_dropout: float = 0.3,
-        *args, **kwargs
+        p_dropout: float = 0.3
     ) -> None:
         """Initialize ClassificationModule.
 
@@ -424,7 +421,7 @@ class ClassificationModule(nn.Module):
         p_dropout : float, optional
             Dropout's probability, by default is 0.3.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.roi_size = roi_size
         self.avg_pool = nn.AvgPool2d(roi_size)
         self.fc = nn.Linear(out_channels, hidden_dim)
