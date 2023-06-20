@@ -20,8 +20,7 @@ class ObjectDetectionDataset(Dataset):
     A Pytorch Dataset class to load the images and
     their corresponding annotations.
 
-    Returns
-    ------------
+    Each sample is a tuple consists of:
     images: torch.Tensor of size (B, C, H, W)
     gt bboxes: torch.Tensor of size (B, max_objects, 4)
     gt classes: torch.Tensor of size (B, max_objects)
