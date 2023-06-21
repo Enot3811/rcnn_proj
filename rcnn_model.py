@@ -280,6 +280,7 @@ class RegionProposalNetwork(nn.Module):
         # TODO Think about separate train and evaluation forward
         b_size = gt_cls.shape[0]
         batch_anc_grid = self.anchor_grid.repeat((b_size, 1, 1, 1, 1))
+        batch_anc_grid = batch_anc_grid.view(b_size, -1, 4)
 
         gt_boxes_map = project_bboxes(
             gt_boxes, self.width_scale, self.height_scale, 'p2a')
@@ -295,7 +296,8 @@ class RegionProposalNetwork(nn.Module):
         pos_conf, neg_conf, pos_offsets, proposals = self.proposal_module(
             feature_maps, pos_anc_idxs, neg_anc_idxs, pos_ancs)
         
-        rpn_loss = self.loss(pos_conf, neg_conf, pos_offsets, gt_offsets)
+        rpn_loss = self.loss(
+            pos_conf, neg_conf, pos_offsets, gt_offsets, b_size)
 
         return rpn_loss, feature_maps, proposals, pos_b_idxs, gt_class_pos
 
@@ -443,7 +445,7 @@ class ClassificationModule(nn.Module):
         predicted_proposals : Tensor
             Feature map from RPN's backbone.
             It has shape `[b, out_channels, out_size_h, out_size_w]`.
-        predicted_proposals : Tensor
+        predicted_proposals : List[Tensor]
             Predicted proposals from RPN.
             List has length `n_pos_anc` and each element has shape `[4,]`.
         gt_cls : Tensor, optional
@@ -457,7 +459,7 @@ class ClassificationModule(nn.Module):
             and class loss with shape `[n_cls]` if ground truth are given.
         """
         x = ops.roi_pool(feature_maps, predicted_proposals, self.roi_size)
-        x = self.avg_pool(x)
+        x = self.avg_pool(x).flatten(start_dim=1)
         x = self.fc(x)
         x = self.dropout(x)
         cls_scores = self.cls_head(x)
@@ -478,7 +480,7 @@ class RCNN_Detector(nn.Module):
         backbone_out_size: Tuple[int, int],
         backbone_out_channels: int,
         n_cls: int,
-        roi_size,
+        roi_size: Tuple[int, int],
         anc_scales: Iterable[float] = (2, 4, 6),
         anc_ratios: Iterable[float] = (0.5, 1, 1.5),
         pos_anc_thresh: float = 0.7,
@@ -500,7 +502,7 @@ class RCNN_Detector(nn.Module):
             _description_
         n_cls : int
             _description_
-        roi_size : _type_
+        roi_size : Tuple[int, int]
             _description_
         anc_scales : Iterable[float], optional
             _description_, by default (2, 4, 6)
