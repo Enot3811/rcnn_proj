@@ -4,7 +4,6 @@ import torch
 import torchvision
 from torch.utils.data import DataLoader
 
-import rcnn_utils
 import rcnn_model
 
 from object_detection_dataset import ObjectDetectionDataset
@@ -13,59 +12,58 @@ from object_detection_dataset import ObjectDetectionDataset
 def main():
     path = Path(__file__).parent
 
+    # Dataset's settings
     annotation_path = path.joinpath('data/annotations.xml')
     img_dir = path.joinpath('data/images')
     name2index = {'pad': -1, 'camel': 0, 'bird': 1}
     index2name = {-1: 'pad', 0: 'camel', 1: 'bird'}
     img_width = 640
     img_height = 480
+    n_cls = len(name2index) - 1
 
+    # Thresholds for object detecting
+    pos_thresh = 0.7
+    neg_thresh = 0.3
+
+    # Anchors parameters
+    anc_scales = [2, 4, 6]
+    anc_ratios = [0.5, 1, 1.5]
+
+    # Roi size for classifier
+    roi_size = (2, 2)
+
+    # Get Dataset and Loader
     dset = ObjectDetectionDataset(
         annotation_path, img_dir, (img_width, img_height), name2index)
+    dloader = DataLoader(dset, batch_size=2)
 
+    # Get backbone for RPN
     resnet = torchvision.models.resnet50(
         weights=torchvision.models.ResNet50_Weights.DEFAULT)
     backbone = torch.nn.Sequential(*list(resnet.children())[:8])
 
-    dloader = DataLoader(dset, batch_size=2)
-    sample = next(iter(dloader))
-    image, gt_boxes, classes = sample
+    # Use backbone to get it's output size
+    batch = next(iter(dloader))
+    images, gt_boxes, gt_cls = batch
+    backbone_out = backbone(images)
 
-    backbone_out = backbone(sample[0])
+    # Backbone output size
     b, out_c, out_h, out_w = backbone_out.shape
 
-    width_scale_factor = img_width // out_w
-    height_scale_factor = img_height // out_h
-
-    x_anchors, y_anchors = rcnn_utils.generate_anchors((out_h, out_w))
-    projected_x_anchors = x_anchors * width_scale_factor
-    projected_y_anchors = y_anchors * height_scale_factor
-
-    anc_scales = [2, 4, 6]
-    anc_ratios = [0.5, 1, 1.5]
-    anc_bboxes_grid = rcnn_utils.generate_anchor_boxes(
-        x_anchors, y_anchors, anc_scales, anc_ratios, (out_h, out_w))
-    all_anc_bboxes = anc_bboxes_grid.repeat(len(dset), 1, 1, 1, 1)
+    # Get the model
+    model = rcnn_model.RCNN_Detector(
+        (img_height, img_width), (out_h, out_w), out_c, n_cls, roi_size,
+        anc_scales, anc_ratios, pos_thresh, neg_thresh)
     
-    projected_gt = rcnn_utils.project_bboxes(
-        gt_boxes.reshape(-1, 4), width_scale_factor,
-        height_scale_factor, 'p2a').reshape(gt_boxes.shape)
-
-    (pos_anc_idxs, neg_anc_idxs, pos_b_idxs,
-     pos_ancs, neg_ancs, pos_anc_conf_scores,
-     gt_class_pos, gt_offsets) = rcnn_utils.get_required_anchors(
-        all_anc_bboxes.reshape(b, -1, 4), projected_gt, classes)
-    
-    proposal_module = rcnn_model.ProposalModule(out_c)
-    proposal_module(backbone_out, pos_anc_idxs, neg_anc_idxs, pos_ancs)
+    # Iterate over dataset
+    for batch in dloader:
+        images, gt_boxes, gt_cls = batch
+        proposals, cls_scores, total_loss = model(images, gt_boxes, gt_cls)
 
 
 if __name__ == '__main__':
     main()
     # source_pipeline()
-    # a = torch.tensor([[1, -1, 3], [-1, 1, -1]])
-    # res = torch.where(a > 0)
-    # print(res)
 
 
 def source_pipeline():
