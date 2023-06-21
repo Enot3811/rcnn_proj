@@ -252,8 +252,7 @@ class RegionProposalNetwork(nn.Module):
             x_anc_pts, y_anc_pts, anc_scales, anc_ratios, out_size)
 
     def forward(
-        self,
-        input_batch: Tensor
+        self, images: Tensor, gt_boxes: Tensor, gt_cls: Tensor
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         """Forward pass of the region proposal network.
 
@@ -279,7 +278,6 @@ class RegionProposalNetwork(nn.Module):
             with shape `[n_pred_pos_anc,]`.
         """
         # TODO Think about separate train and evaluation forward
-        images, gt_boxes, gt_cls = input_batch
         b_size = gt_cls.shape[0]
         batch_anc_grid = self.anchor_grid.repeat((b_size, 1, 1, 1, 1))
 
