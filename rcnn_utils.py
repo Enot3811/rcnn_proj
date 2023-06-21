@@ -262,7 +262,7 @@ def anc_gt_iou(
 
     Parameters
     ----------
-    anc_boxes_all : Tensor
+    anc_boxes_grid : Tensor
         A grid of the anchor boxes with a shape `[n_boxes, 4]`.
     gt_boxes : Tensor
         The ground truth boxes with a shape `[B, m_boxes, 4]`.
@@ -277,7 +277,7 @@ def anc_gt_iou(
     RuntimeError
         gt_boxes must have shape like `[B, m_boxes, 4]`.
     RuntimeError
-        anc_boxes_grid must have shape like [B, m_boxes, 4].
+        anc_boxes_grid must have shape like [n_boxes, 4].
     """
     if len(gt_boxes.shape) != 3:
         raise RuntimeError(
@@ -285,7 +285,7 @@ def anc_gt_iou(
             f'it has {gt_boxes.shape}.')
     if len(anc_boxes_grid.shape) != 2:
         raise RuntimeError(
-            'anc_boxes_grid must have shape like [B, m_boxes, 4] but '
+            'anc_boxes_grid must have shape like [n_boxes, 4] but '
             f'it has {gt_boxes.shape}.')
     
     b_size = gt_boxes.size(0)
