@@ -528,6 +528,41 @@ class RCNN_Detector(nn.Module):
             backbone_out_channels, n_cls, roi_size, classifier_hid_dim,
             classifier_p_dropout)
 
-    def forward(self, images: Tensor):
-        # TODO implement forward pass
-        self.rpn()
+    def forward(
+        self, images: Tensor, gt_boxes: Tensor, gt_cls: Tensor
+    ) -> Tuple[Tensor, Tensor, float]:
+        """Forward pass of RCNN.
+
+        Get images, ground truth bounding boxes and corresponding classes and
+        return proposal bounding boxes, corresponding classes probabilities and
+        calculated loss.
+
+        Parameters
+        ----------
+        images : Tensor
+            Batch of images with shape `[b, 3, input_size[0], input_size[1]]`.
+        gt_boxes : Tensor
+            Ground truth objects bounding boxes with shape `[b, n_max_obj, 4]`.
+        gt_cls : Tensor
+            Ground truth classes of the bounding boxes.
+
+        Returns
+        -------
+        Tuple[Tensor, Tensor, float]
+            Proposals with shape [n_pos_anc, 4],
+            classes scores with shape [n_pos_anc, n_cls] and RCNN loss.
+        """
+        b_size = images.shape[0]
+        rpn_loss, feature_maps, proposals, pos_b_idxs, gt_class_pos = (
+            self.rpn(images, gt_boxes, gt_cls))
+        
+        proposals_list = []
+        for i in range(b_size):
+            proposals_idxs = torch.where(pos_b_idxs == i)[0]
+            proposals_list.append(proposals[proposals_idxs].detach().clone())
+
+        cls_scores, classifier_loss = (
+            self.classifier(feature_maps, proposals_list, gt_class_pos))
+        total_loss = rpn_loss + classifier_loss
+
+        return proposals, cls_scores, total_loss
