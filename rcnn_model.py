@@ -91,14 +91,15 @@ class ProposalModule(nn.Module):
         neg_anc_idxs: Tensor = None,
         pos_ancs: Tensor = None
     ) -> Union[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor, Tensor]]:
-        """Get object confidence and offsets prediction.
+        """Forward pass of `ProposalModule`.
         
-        It has train and evaluation mode.
-        If got only `feature_maps` then evaluation mode is activated
-        to calculate confidence and offsets.
-        If got all other parameters then train mode is activated to calculate
-        positive anchors confidence, negative anchors confidence, positive
-        anchors offsets and final proposals.
+        When training `feature_maps`, `pos_anc_idxs`, `neg_anc_idxs`,
+        `pos_ancs` are required and positive anchors confidence,
+        negative anchors confidence, positive anchors offsets,
+        final proposals are calculated.
+
+        When evaluating only `feature_maps` is required
+        and confidence and offsets are calculated.
 
         Parameters
         ----------
@@ -119,7 +120,7 @@ class ProposalModule(nn.Module):
         Returns
         -------
         Union[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor, Tensor]]
-            When evaluate mode return the object confidence for every anchor
+            When evaluation mode return the object confidence for every anchor
             box with shape `[b, n_anc_box, map_h, map_w]` and the offsets with
             shape `[b, n_anc_box * 4, map_h, map_w]`.
             When train mode return the positive and negative object confidence
@@ -132,12 +133,14 @@ class ProposalModule(nn.Module):
         x = self.dropout(x)
         conf_pred: Tensor = self.conf_head(x)
         offsets_pred: Tensor = self.reg_head(x)
-
-        mode = ('eval' if (pos_anc_idxs is None or neg_anc_idxs is None or
-                           pos_ancs is None)
-                else 'train')
         
-        if mode == 'train':
+        if self.training:
+            check_args = (pos_anc_idxs is None or neg_anc_idxs is None or
+                          pos_ancs is None)
+            if check_args:
+                raise ValueError('In training mode pos_anc_idxs, '
+                                 'neg_anc_idxs and pos_ancs are required.')
+
             pos_conf = conf_pred.permute(0, 2, 3, 1).flatten()[pos_anc_idxs]
             neg_conf = conf_pred.permute(0, 2, 3, 1).flatten()[neg_anc_idxs]
 
@@ -148,10 +151,8 @@ class ProposalModule(nn.Module):
 
             return pos_conf, neg_conf, pos_offsets, proposals
 
-        elif mode == 'eval':
-            return conf_pred, offsets_pred
         else:
-            raise
+            return conf_pred, offsets_pred
 
     def _generate_proposals(
         self,
