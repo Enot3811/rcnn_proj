@@ -81,25 +81,24 @@ class ProposalModule(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.dropout = nn.Dropout(p_dropout, inplace=True)
         self.dropout = nn.Dropout(p_dropout)
-        self.conf_head = nn.Conv2d(hidden_dim, n_anchors, kernel_size=1)
+        self.conf_scores_head = nn.Conv2d(hidden_dim, n_anchors, kernel_size=1)
         self.reg_head = nn.Conv2d(hidden_dim, n_anchors * 4, kernel_size=1)
 
     def forward(
         self,
         feature_maps: Tensor,
         pos_anc_idxs: Tensor = None,
-        neg_anc_idxs: Tensor = None,
-        pos_ancs: Tensor = None
+        neg_anc_idxs: Tensor = None
     ) -> Union[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor, Tensor]]:
         """Forward pass of `ProposalModule`.
         
-        When training `feature_maps`, `pos_anc_idxs`, `neg_anc_idxs`,
-        `pos_ancs` are required and positive anchors confidence,
-        negative anchors confidence, positive anchors offsets,
-        final proposals are calculated.
+        When training `feature_maps`, `pos_anc_idxs`, `neg_anc_idxs`
+        are required and positive anchors confidence scores,
+        negative anchors confidence scores and positive anchors offsets
+        are calculated.
 
         When evaluating only `feature_maps` is required
-        and confidence and offsets are calculated.
+        and confidence scores and offsets for every anchor are calculated.
 
         Parameters
         ----------
@@ -113,77 +112,39 @@ class ProposalModule(nn.Module):
             Indexes of negative anchor boxes when tensor is flatten.
             Shape is `[n_pos_anc,]`.
             By default is `None`, but during train must be given.
-        pos_ancs : Tensor, optional
-            Positive anchors with shape `[n_pos_anc, 4]`.
-            By default is `None`, but during train must be given.
 
         Returns
         -------
         Union[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor, Tensor]]
-            When evaluation mode return the object confidence for every anchor
-            box with shape `[b, n_anc_box, map_h, map_w]` and the offsets with
-            shape `[b, n_anc_box * 4, map_h, map_w]`.
+            When evaluation mode return the object confidence scores
+            with shape `[b, n_anc_box, map_h, map_w]`
+            and the offsets with shape `[b, n_anc_box * 4, map_h, map_w]`
+            for every anchor box.
             When train mode return the positive and negative object confidence
-            separately, with shape `[n_pos_anc,]` and `[n_neg_anc,]`, offsets
-            of positive anchors with shape `[n_pos_anc, 4]`,
-            proposals of network with shape `[n_pos_anc, 4]`.
+            scores separately, with shape `[n_pos_anc,]` and `[n_neg_anc,]`
+            and offsets of positive anchors with shape `[n_pos_anc, 4]`.
         """
         x = self.hidden_conv(feature_maps)
         x = self.relu(x)
         x = self.dropout(x)
-        conf_pred: Tensor = self.conf_head(x)
+        conf_scores_pred: Tensor = self.conf_scores_head(x)
         offsets_pred: Tensor = self.reg_head(x)
+
+        conf_scores_pred = conf_scores_pred.permute(0, 2, 3, 1)
+        offsets_pred = offsets_pred.permute(0, 2, 3, 1)
         
         if self.training:
-            check_args = (pos_anc_idxs is None or neg_anc_idxs is None or
-                          pos_ancs is None)
-            if check_args:
+            if pos_anc_idxs is None or neg_anc_idxs is None:
                 raise ValueError('In training mode pos_anc_idxs, '
                                  'neg_anc_idxs and pos_ancs are required.')
 
-            pos_conf = conf_pred.permute(0, 2, 3, 1).flatten()[pos_anc_idxs]
-            neg_conf = conf_pred.permute(0, 2, 3, 1).flatten()[neg_anc_idxs]
-
-            pos_offsets = (offsets_pred.permute(0, 2, 3, 1)
-                           .contiguous().view(-1, 4))[pos_anc_idxs]
-            
-            proposals = self._generate_proposals(pos_ancs, pos_offsets)
-
-            return pos_conf, neg_conf, pos_offsets, proposals
-
+            pos_conf_scores = conf_scores_pred.flatten()[pos_anc_idxs]
+            neg_conf_scores = conf_scores_pred.flatten()[neg_anc_idxs]
+            pos_offsets = offsets_pred.contiguous().view(-1, 4)[pos_anc_idxs]
+            return pos_conf_scores, neg_conf_scores, pos_offsets
         else:
-            return conf_pred, offsets_pred
-
-    def _generate_proposals(
-        self,
-        anchors: Tensor,
-        offsets: Tensor
-    ) -> Tensor:
-        """Generate proposals with anchor boxes and its offsets.
-
-        Get anchors and apply offsets to them.
-
-        Parameters
-        ----------
-        anchors : Tensor
-            The anchor boxes with shape `[n_anc, 4]`.
-        offsets : Tensor
-            The offsets with shape `[n_anc, 4]`.
-
-        Returns
-        -------
-        Tensor
-            The anchor boxes shifted by the offsets with shape `[n_anc, 4]`.
-        """
-        anchors = ops.box_convert(anchors, 'xyxy', 'cxcywh')
-        proposals = torch.zeros_like(anchors)
-        proposals[:, 0] = anchors[:, 0] + offsets[:, 0] * anchors[:, 2]
-        proposals[:, 1] = anchors[:, 1] + offsets[:, 1] * anchors[:, 3]
-        proposals[:, 2] = anchors[:, 2] * torch.exp(offsets[:, 2])
-        proposals[:, 3] = anchors[:, 3] * torch.exp(offsets[:, 3])
-
-        proposals = ops.box_convert(proposals, 'cxcywh', 'xyxy')
-        return proposals
+            # TODO разобраться, нужен ли здесь flat
+            return conf_scores_pred, offsets_pred
 
 
 class RegionProposalNetwork(nn.Module):
