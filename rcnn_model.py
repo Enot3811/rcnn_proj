@@ -399,8 +399,8 @@ class ClassificationModule(nn.Module):
         """Classify predicted proposals.
 
         Calculate class scores for the given proposals.
-        If ground truth classes is given
-        then calculate categorical cross entropy loss additionally.
+        During training, the ground truth classes is required
+        and categorical cross entropy loss are calculated.
 
         Parameters
         ----------
@@ -412,26 +412,26 @@ class ClassificationModule(nn.Module):
             List has length `n_pos_anc` and each element has shape `[4,]`.
         gt_cls : Tensor, optional
             Ground truth classes with shape `[n_pos_anc,]`.
-            If given then loss calculating will be done.
+            It required during training.
 
         Returns
         -------
         Union[Tensor, Tuple[Tensor]]
-            Class scores with shape `[n_pos_anc]'
-            and class loss with shape `[n_cls]` if ground truth are given.
+            Class scores with shape `[n_pos_anc]' during evaluation
+            and additional class loss with shape `[n_cls]` during training.
         """
         x = ops.roi_pool(feature_maps, predicted_proposals, self.roi_size)
         x = self.avg_pool(x).flatten(start_dim=1)
         x = self.fc(x)
         x = self.dropout(x)
         cls_scores = self.cls_head(x)
-
-        # Inference
-        if gt_cls is None:
-            return cls_scores
-        # Train
-        else:
+        
+        if self.training:
+            if gt_cls is None:
+                raise ValueError('While training gt_cls argument is required.')
             return cls_scores, F.cross_entropy(cls_scores, gt_cls.long())
+        else:
+            return cls_scores
 
 
 # TODO implement two stage detector
