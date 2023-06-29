@@ -92,12 +92,12 @@ class ProposalModule(nn.Module):
     ) -> Union[Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor, Tensor]]:
         """Forward pass of `ProposalModule`.
         
-        When training `feature_maps`, `pos_anc_idxs`, `neg_anc_idxs`
+        When training, `feature_maps`, `pos_anc_idxs`, `neg_anc_idxs`
         are required and positive anchors confidence scores,
         negative anchors confidence scores and positive anchors offsets
         are calculated.
 
-        When evaluating only `feature_maps` is required
+        When evaluating, only `feature_maps` is required
         and confidence scores and offsets for every anchor are calculated.
 
         Parameters
@@ -143,7 +143,6 @@ class ProposalModule(nn.Module):
             pos_offsets = offsets_pred.contiguous().view(-1, 4)[pos_anc_idxs]
             return pos_conf_scores, neg_conf_scores, pos_offsets
         else:
-            # TODO разобраться, нужен ли здесь flat
             return conf_scores_pred, offsets_pred
 
 
