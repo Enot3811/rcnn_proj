@@ -222,6 +222,7 @@ class RegionProposalNetwork(nn.Module):
         nms_thresh: float = 0.7
     ) -> Union[Tuple[Tensor, Tensor, Tensor, Tensor, Tensor],
                Tuple[Tensor, Tensor, Tensor, Tensor]]:
+        # TODO check docs
         """Forward pass of the region proposal network.
 
         A given image pass through the backbone network,
