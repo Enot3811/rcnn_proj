@@ -59,6 +59,13 @@ def main():
     for batch in dloader:
         images, gt_boxes, gt_cls = batch
         proposals, cls_scores, total_loss = model(images, gt_boxes, gt_cls)
+        break
+
+    model.eval()
+    for batch in dloader:
+        images, gt_boxes, gt_cls = batch
+        proposals, cls_scores = model(images, conf_thresh=0.6)
+        break
 
 
 if __name__ == '__main__':
