@@ -198,6 +198,7 @@ class RegionProposalNetwork(nn.Module):
         self.feature_extractor = FeatureExtractor()
         self.proposal_module = ProposalModule(
             out_channels, len(anc_scales) * len(anc_ratios))
+        self.scores_sigmoid = nn.Sigmoid()
 
         self.pos_anc_thresh = pos_anc_thresh
         self.neg_anc_thresh = neg_anc_thresh
@@ -213,54 +214,152 @@ class RegionProposalNetwork(nn.Module):
             x_anc_pts, y_anc_pts, anc_scales, anc_ratios, out_size)
 
     def forward(
-        self, images: Tensor, gt_boxes: Tensor, gt_cls: Tensor
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+        self,
+        images: Tensor,
+        gt_boxes: Tensor = None,
+        gt_cls: Tensor = None,
+        conf_thresh: float = 0.5,
+        nms_thresh: float = 0.7
+    ) -> Union[Tuple[Tensor, Tensor, Tensor, Tensor, Tensor],
+               Tuple[Tensor, Tensor, Tensor, Tensor]]:
         """Forward pass of the region proposal network.
 
         A given image pass through the backbone network,
         and feature map is gotten.
         Then this feature map is used for creating bounding boxes proposals.
-        Basing on gotten proposals RPN loss will be calculated.
+
+        During training, ground `gt_boxes` and `gt_cls`
+        containing ground truth bounding boxes and corresponding classes
+        are required for loss calculation.
+
+        During evaluation there are required `conf_thresh` that contains object
+        confidence threshold and nms_thresh that contains IoU overlapping
+        threshold for non maximum suppression.
+
 
         Parameters
         ----------
-        input_batch : Tensor
+        images : Tensor
             An input batch of images with shape `[b, c, h, w]`.
+        gt_boxes : Tensor, optional
+            The ground truth bounding boxes with shape `[b, n_max_obj, 4]`.
+            It is required during training.
+        gt_cls : Tensor, optional
+            The ground truth classes with shape `[b, n_max_obj]`.
+            It is required during training.
+        conf_thresh : float, optional
+            Object confidence threshold that used during evaluation.
+            By default is 0.5.
+        nms_thresh : float, optional
+            IoU NMS threshold that used during evaluation. By default is 0.7.
 
         Returns
         -------
-        Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]
-            Calculated RPN loss,
-            feature map with shape `[out_channels, out_size[0], out_size[1]]`,
-            region proposals with shape `[n_pred_pos_anc, 4]` in format "xyxy",
-            batch indexes of predicted positive anchors
-            with shape `[n_pred_pos_anc,]`
-            and ground truth classes of predicted positive anchors
-            with shape `[n_pred_pos_anc,]`.
+        Union[Tuple[Tensor, Tensor, Tensor, Tensor, Tensor],
+              Tuple[Tensor, Tensor, Tensor, Tensor]]
+            During training return:
+            `rpn_loss` containing loss,
+            `feature_maps` with shape `[out_channels, out_size_h, out_size_w]`
+            containing containing backbone's feature map,
+            `proposals` with shape `[n_pred_pos_anc, 4]`
+            containing generated proposals in format "xyxy",
+            `pos_b_idxs` with shape `[n_pred_pos_anc,]`
+            containing batch indexes
+            and `gt_class_pos` with shape `[n_pred_pos_anc,]`,
+            containing ground truth classes of predicted positive anchors.
+            During evaluation return:
+            `feature_maps` with shape `[out_channels, out_size_h, out_size_w]`
+            containing backbone's feature map,
+            `proposals` with shape `[n_pred_pos_anc, 4]`
+            containing generated proposals in format "xyxy",
+            `pos_confs` with shape `[n_pred_pos_anc,]`,
+            containing object confidences for generated proposals
+            and `pos_b_idxs` with shape `[n_pred_pos_anc,]` batch indexes.
         """
-        # TODO Think about separate train and evaluation forward
-        b_size = gt_cls.shape[0]
-        batch_anc_grid = self.anchor_grid.repeat((b_size, 1, 1, 1, 1))
-        batch_anc_grid = batch_anc_grid.view(b_size, -1, 4)
+        b_size = images.shape[0]
 
-        gt_boxes_map = project_bboxes(
-            gt_boxes, self.width_scale, self.height_scale, 'p2a')
+        if self.training:
 
-        feature_maps = self.feature_extractor(images)
+            feature_maps = self.feature_extractor(images)
 
-        (pos_anc_idxs, neg_anc_idxs, pos_b_idxs,
-         pos_ancs, neg_ancs, pos_anc_conf_scores,
-         gt_class_pos, gt_offsets) = get_required_anchors(
-            batch_anc_grid, gt_boxes_map, gt_cls,
-            self.pos_anc_thresh, self.neg_anc_thresh)
+            batch_anc_grid = self.anchor_grid.repeat((b_size, 1, 1, 1, 1))
+            batch_anc_grid = batch_anc_grid.view(b_size, -1, 4)
 
-        pos_conf, neg_conf, pos_offsets, proposals = self.proposal_module(
-            feature_maps, pos_anc_idxs, neg_anc_idxs, pos_ancs)
+            gt_boxes_map = project_bboxes(
+                gt_boxes, self.width_scale, self.height_scale, 'p2a')
+
+            (pos_anc_idxs, neg_anc_idxs, pos_b_idxs,
+             pos_ancs, neg_ancs, gt_pos_anc_conf_scores,
+             gt_class_pos, gt_offsets) = get_required_anchors(
+                batch_anc_grid, gt_boxes_map, gt_cls,
+                self.pos_anc_thresh, self.neg_anc_thresh)
+
+            (pos_conf_scores, neg_conf_scores,
+             pos_offsets) = self.proposal_module(
+                feature_maps, pos_anc_idxs, neg_anc_idxs)
+            
+            rpn_loss = self.loss(pos_conf_scores, neg_conf_scores, pos_offsets,
+                                 gt_offsets, b_size)
+            
+            proposals = self.generate_proposals(pos_ancs, pos_offsets)
+
+            return rpn_loss, feature_maps, proposals, pos_b_idxs, gt_class_pos
         
-        rpn_loss = self.loss(
-            pos_conf, neg_conf, pos_offsets, gt_offsets, b_size)
+        else:
+            feature_maps = self.feature_extractor(images)
+            scores, offsets = self.proposal_module(feature_maps)
+            confidences = self.scores_sigmoid(scores)
 
-        return rpn_loss, feature_maps, proposals, pos_b_idxs, gt_class_pos
+            pos_b_idxs = torch.where(confidences >= conf_thresh)[0]
+            confidences = confidences.flatten()
+            offsets = offsets.contiguous().view((-1, 4))
+            pos_anc_idxs = torch.where(confidences >= conf_thresh)[0]
+
+            pos_confs = confidences[pos_anc_idxs]
+            pos_offsets = offsets[pos_anc_idxs]
+
+            batch_anc_grid = self.anchor_grid.repeat((b_size, 1, 1, 1, 1))
+            pos_ancs = batch_anc_grid.flatten(end_dim=-2)[pos_anc_idxs]
+
+            proposals = self.generate_proposals(pos_ancs, pos_offsets)
+
+            nms_idxs = ops.nms(proposals, pos_confs, nms_thresh)
+            proposals = proposals[nms_idxs]
+            pos_confs = pos_confs[nms_idxs]
+            pos_b_idxs = pos_b_idxs[nms_idxs]
+
+            return feature_maps, proposals, pos_confs, pos_b_idxs
+            
+    def generate_proposals(
+        self,
+        anchors: Tensor,
+        offsets: Tensor
+    ) -> Tensor:
+        """Generate proposals with anchor boxes and its offsets.
+
+        Get anchors and apply offsets to them.
+
+        Parameters
+        ----------
+        anchors : Tensor
+            The anchor boxes with shape `[n_anc, 4]`.
+        offsets : Tensor
+            The offsets with shape `[n_anc, 4]`.
+
+        Returns
+        -------
+        Tensor
+            The anchor boxes shifted by the offsets with shape `[n_anc, 4]`.
+        """
+        anchors = ops.box_convert(anchors, 'xyxy', 'cxcywh')
+        proposals = torch.zeros_like(anchors)
+        proposals[:, 0] = anchors[:, 0] + offsets[:, 0] * anchors[:, 2]
+        proposals[:, 1] = anchors[:, 1] + offsets[:, 1] * anchors[:, 3]
+        proposals[:, 2] = anchors[:, 2] * torch.exp(offsets[:, 2])
+        proposals[:, 3] = anchors[:, 3] * torch.exp(offsets[:, 3])
+
+        proposals = ops.box_convert(proposals, 'cxcywh', 'xyxy')
+        return proposals
 
     def loss(
         self,
