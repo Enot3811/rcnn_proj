@@ -589,13 +589,19 @@ class RCNN_Detector(nn.Module):
         self.classifier = ClassificationModule(
             backbone_out_channels, n_cls, roi_size, classifier_hid_dim,
             classifier_p_dropout)
+        self.softmax = nn.Softmax()
 
     def forward(
-        self, images: Tensor, gt_boxes: Tensor, gt_cls: Tensor
+        self,
+        images: Tensor,
+        gt_boxes: Tensor = None,
+        gt_cls: Tensor = None,
+        conf_thresh: float = 0.5,
+        nms_thresh: float = 0.7
     ) -> Tuple[Tensor, Tensor, float]:
         """Forward pass of RCNN.
 
-        Get images, ground truth bounding boxes and corresponding classes and
+        While training, get images, ground truth bounding boxes and corresponding classes and
         return proposal bounding boxes, corresponding classes probabilities and
         calculated loss.
 
@@ -603,9 +609,9 @@ class RCNN_Detector(nn.Module):
         ----------
         images : Tensor
             Batch of images with shape `[b, 3, input_size[0], input_size[1]]`.
-        gt_boxes : Tensor
+        gt_boxes : Tensor, optional
             Ground truth objects bounding boxes with shape `[b, n_max_obj, 4]`.
-        gt_cls : Tensor
+        gt_cls : Tensor, optional
             Ground truth classes of the bounding boxes.
 
         Returns
@@ -615,16 +621,48 @@ class RCNN_Detector(nn.Module):
             classes scores with shape [n_pos_anc, n_cls] and RCNN loss.
         """
         b_size = images.shape[0]
-        rpn_loss, feature_maps, proposals, pos_b_idxs, gt_class_pos = (
-            self.rpn(images, gt_boxes, gt_cls))
-        
-        proposals_list = []
-        for i in range(b_size):
-            proposals_idxs = torch.where(pos_b_idxs == i)[0]
-            proposals_list.append(proposals[proposals_idxs].detach().clone())
 
-        cls_scores, classifier_loss = (
-            self.classifier(feature_maps, proposals_list, gt_class_pos))
-        total_loss = rpn_loss + classifier_loss
+        if self.training:
+            rpn_loss, feature_maps, proposals, pos_b_idxs, gt_class_pos = (
+                self.rpn(images, gt_boxes, gt_cls))
+            
+            proposals_list = []
+            for i in range(b_size):
+                proposals_idxs = torch.where(pos_b_idxs == i)[0]
+                proposals_list.append(
+                    proposals[proposals_idxs].detach().clone())
 
-        return proposals, cls_scores, total_loss
+            cls_scores, classifier_loss = (
+                self.classifier(feature_maps, proposals_list, gt_class_pos))
+            total_loss = rpn_loss + classifier_loss
+
+            cls_scores_list = []
+            idx = 0
+            for image_proposals in proposals_list:
+                cls_scores_list.append(cls_scores[idx:len(image_proposals)])
+                idx += len(image_proposals)
+
+            return proposals_list, cls_scores_list, total_loss
+        else:
+            # TODO debug
+            with torch.no_grad():
+                feature_maps, proposals, confidences, pos_b_idxs = self.rpn(
+                    images, conf_thresh, nms_thresh)
+                
+                conf_pred = []
+                proposals_list = []
+                for i in range(b_size):
+                    cur_idxs = torch.where(pos_b_idxs == i)
+                    conf_pred.append(confidences[cur_idxs])
+                    proposals_list.append(proposals[cur_idxs])
+
+                cls_scores = self.classifier(feature_maps, proposals_list)
+                cls_conf = self.softmax(cls_scores)
+
+                cls_conf_list = []
+                idx = 0
+                for image_proposals in proposals_list:
+                    cls_conf_list.append(cls_conf[idx:len(image_proposals)])
+                    idx += len(image_proposals)
+                
+                return proposals_list, cls_conf_list
