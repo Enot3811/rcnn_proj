@@ -192,7 +192,7 @@ class RegionProposalNetwork(nn.Module):
             Weight coefficient for confidence loss. By default is 1.0.
         w_reg : float, optional
             Weight coefficient for predicted offsets regression loss.
-            By default is 1.0.
+            By default is 5.0.
         """
         super().__init__()
         self.feature_extractor = FeatureExtractor()
@@ -222,7 +222,6 @@ class RegionProposalNetwork(nn.Module):
         nms_thresh: float = 0.7
     ) -> Union[Tuple[Tensor, Tensor, Tensor, Tensor, Tensor],
                Tuple[Tensor, Tensor, Tensor, Tensor]]:
-        # TODO check docs
         """Forward pass of the region proposal network.
 
         A given image pass through the backbone network,
@@ -494,7 +493,7 @@ class ClassificationModule(nn.Module):
         feature_maps: Tensor,
         predicted_proposals: List[Tensor],
         gt_cls: Tensor = None
-    ) -> Union[Tensor, Tuple[Tensor]]:
+    ) -> Union[Tensor, Tuple[Tensor, Tensor]]:
         """Classify predicted proposals.
 
         Calculate class scores for the given proposals.
@@ -533,7 +532,6 @@ class ClassificationModule(nn.Module):
             return cls_scores
 
 
-# TODO implement two stage detector
 class RCNN_Detector(nn.Module):
     def __init__(
         self,
@@ -551,36 +549,41 @@ class RCNN_Detector(nn.Module):
         classifier_hid_dim: int = 512,
         classifier_p_dropout: float = 0.3
     ) -> None:
-        """ TODO write docs
+        """Initialize RCNN network.
 
         Parameters
         ----------
         input_size : Tuple[int, int]
-            _description_
+            A size of input images.
         backbone_out_size : Tuple[int, int]
-            _description_
+            An expected backbone's output feature map size.
         backbone_out_channels : int
-            _description_
+            An expected number of channels of backbone's output feature map.
         n_cls : int
-            _description_
+            A number of classification classes.
         roi_size : Tuple[int, int]
-            _description_
+            A size for RoI pulling.
         anc_scales : Iterable[float], optional
-            _description_, by default (2, 4, 6)
+            Scale factors of anchor bounding boxes.
+            By default is (2.0, 4.0, 6.0).
         anc_ratios : Iterable[float], optional
-            _description_, by default (0.5, 1, 1.5)
+            Ratio factors of anchor bounding boxes sides.
+            By default is (0.5, 1.0, 1.5).
         pos_anc_thresh : float, optional
-            _description_, by default 0.7
+            Confidence threshold for selecting positive anchors.
+            By default is 0.7.
         neg_anc_thresh : float, optional
-            _description_, by default 0.3
+            Confidence threshold for selecting negative anchors.
+            By default is 0.3.
         w_conf_loss : float, optional
-            _description_, by default 1
+            Weight coefficient for confidence loss. By default is 1.0.
         w_reg_loss : float, optional
-            _description_, by default 5
+             Weight coefficient for predicted offsets regression loss.
+             By default is 5.0.
         classifier_hid_dim : int, optional
-            _description_, by default 512
+            A size of hidden dimension for classifier, by default is 512.
         classifier_p_dropout : float, optional
-            _description_, by default 0.3
+            A probability for classifier's dropout. By default is 0.3.
         """
         super().__init__()
         self.rpn = RegionProposalNetwork(
@@ -599,27 +602,48 @@ class RCNN_Detector(nn.Module):
         gt_cls: Tensor = None,
         conf_thresh: float = 0.5,
         nms_thresh: float = 0.7
-    ) -> Tuple[Tensor, Tensor, float]:
+    ) -> Union[Tuple[List[Tensor], Tensor],
+               Tuple[List[Tensor], List[Tensor], Tensor]]:
         """Forward pass of RCNN.
 
-        While training, get images, ground truth bounding boxes and corresponding classes and
-        return proposal bounding boxes, corresponding classes probabilities and
-        calculated loss.
+        During training, get images, ground truth bounding boxes
+        and corresponding classes
+        and then return proposal bounding boxes,
+        corresponding classes probabilities and calculated loss.
+
+        During evaluation, get images, object confidence threshold
+        and NMS IoU threshold
+        and then return proposals and corresponding classes confidences.
 
         Parameters
         ----------
         images : Tensor
-            Batch of images with shape `[b, 3, input_size[0], input_size[1]]`.
+            A batch of the input images
+            with shape `[b, 3, input_size[0], input_size[1]]`.
         gt_boxes : Tensor, optional
-            Ground truth objects bounding boxes with shape `[b, n_max_obj, 4]`.
+            The ground truth bounding boxes with shape `[b, n_max_obj, 4]`.
+            It is required during training.
         gt_cls : Tensor, optional
-            Ground truth classes of the bounding boxes.
+            The ground truth classes with shape `[b, n_max_obj]`.
+            It is required during training.
+        conf_thresh : float, optional
+            Object confidence threshold that used during evaluation.
+            By default is 0.5.
+        nms_thresh : float, optional
+            IoU NMS threshold that used during evaluation. By default is 0.7.
 
         Returns
         -------
-        Tuple[Tensor, Tensor, float]
-            Proposals with shape [n_pos_anc, 4],
-            classes scores with shape [n_pos_anc, n_cls] and RCNN loss.
+        Union[Tuple[List[Tensor], Tensor],
+              Tuple[List[Tensor], List[Tensor], Tensor]]
+            During evaluation, return:
+            generated proposals list with length `b_size`
+            and each element has shape `[n_pos_anc_per_img, 4]`,
+            list with predicted classes confidences that corresponds
+            to generated proposals.
+            List has length `b_size`
+            and each element has shape `[n_pos_anc_per_img, n_cls]`,
+            During train, additionally return RCNN loss.
         """
         b_size = images.shape[0]
 
@@ -645,7 +669,6 @@ class RCNN_Detector(nn.Module):
 
             return proposals_list, cls_scores_list, total_loss
         else:
-            # TODO debug
             with torch.no_grad():
                 feature_maps, proposals, confidences, pos_b_idxs = self.rpn(
                     images, conf_thresh, nms_thresh)
