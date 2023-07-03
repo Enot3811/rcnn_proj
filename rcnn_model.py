@@ -210,8 +210,9 @@ class RegionProposalNetwork(nn.Module):
         self.w_reg = w_reg
 
         x_anc_pts, y_anc_pts = generate_anchors(out_size)
-        self.anchor_grid = generate_anchor_boxes(
-            x_anc_pts, y_anc_pts, anc_scales, anc_ratios, out_size)
+        anchor_grid = torch.nn.Parameter(generate_anchor_boxes(
+            x_anc_pts, y_anc_pts, anc_scales, anc_ratios, out_size))
+        self.register_buffer('anchor_grid', anchor_grid)
 
     def forward(
         self,
@@ -593,7 +594,7 @@ class RCNN_Detector(nn.Module):
         self.classifier = ClassificationModule(
             backbone_out_channels, n_cls, roi_size, classifier_hid_dim,
             classifier_p_dropout)
-        self.softmax = nn.Softmax()
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(
         self,
@@ -671,7 +672,7 @@ class RCNN_Detector(nn.Module):
         else:
             with torch.no_grad():
                 feature_maps, proposals, confidences, pos_b_idxs = self.rpn(
-                    images, conf_thresh, nms_thresh)
+                    images, conf_thresh=conf_thresh, nms_thresh=nms_thresh)
                 
                 conf_pred = []
                 proposals_list = []
