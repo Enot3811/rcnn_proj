@@ -1,7 +1,7 @@
 """A module that contain functions that help to work with RCNN."""
 
 
-from typing import Iterable, Tuple, Union, Dict, Optional
+from typing import Iterable, Tuple, Union, Dict, Optional, List
 
 import numpy as np
 import torch
@@ -14,7 +14,7 @@ from matplotlib import patches
 def draw_bounding_boxes(
     ax: plt.Axes,
     bboxes: Tensor,
-    labels: Tensor = None,
+    labels: Union[Tensor, List[int]] = None,
     index2name: Dict[int, str] = None,
     line_width: int = 2,
     color: str = 'y',
@@ -28,8 +28,9 @@ def draw_bounding_boxes(
         Axes with a sample image.
     bboxes : Tensor
         A tensor with shape `[N_bboxes, 4]` that contains the bounding boxes.
-    labels : Tensor, optional
-        Labels that correspond the bounding boxes.
+    labels : Union[Tensor, List[int]], optional
+        Int tensor or list with length `N_bboxes` with labels corresponding
+        to the bounding boxes.
     index2name : Dict[int, str], optional
         A converter dict from int labels to names.
     line_width : int, optional
@@ -44,6 +45,8 @@ def draw_bounding_boxes(
     """
     if labels is None:
         labels = torch.tensor([-1] * len(bboxes))
+    if isinstance(labels, list):
+        labels = torch.tensor(labels, dtype=torch.int16)
     for bbox, label in zip(bboxes, labels):
         label = label.item()
         if index2name is not None:
