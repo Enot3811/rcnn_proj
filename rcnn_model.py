@@ -219,8 +219,7 @@ class RegionProposalNetwork(nn.Module):
         images: Tensor,
         gt_boxes: Tensor = None,
         gt_cls: Tensor = None,
-        conf_thresh: float = 0.5,
-        nms_thresh: float = 0.7
+        conf_thresh: float = 0.5
     ) -> Union[Tuple[Tensor, Tensor, Tensor, Tensor, Tensor],
                Tuple[Tensor, Tensor, Tensor, Tensor]]:
         """Forward pass of the region proposal network.
@@ -234,9 +233,7 @@ class RegionProposalNetwork(nn.Module):
         are required for loss calculation.
 
         During evaluation there are required `conf_thresh` that contains object
-        confidence threshold and nms_thresh that contains IoU overlapping
-        threshold for non maximum suppression.
-
+        confidence threshold.
 
         Parameters
         ----------
@@ -251,8 +248,6 @@ class RegionProposalNetwork(nn.Module):
         conf_thresh : float, optional
             Object confidence threshold that used during evaluation.
             By default is 0.5.
-        nms_thresh : float, optional
-            IoU NMS threshold that used during evaluation. By default is 0.7.
 
         Returns
         -------
@@ -323,11 +318,6 @@ class RegionProposalNetwork(nn.Module):
             pos_ancs = batch_anc_grid.flatten(end_dim=-2)[pos_anc_idxs]
 
             proposals = self.generate_proposals(pos_ancs, pos_offsets)
-
-            nms_idxs = ops.nms(proposals, pos_confs, nms_thresh)
-            proposals = proposals[nms_idxs]
-            pos_confs = pos_confs[nms_idxs]
-            pos_b_idxs = pos_b_idxs[nms_idxs]
 
             return feature_maps, proposals, pos_confs, pos_b_idxs
             
@@ -671,15 +661,18 @@ class RCNN_Detector(nn.Module):
             return proposals_list, cls_scores_list, total_loss
         else:
             with torch.no_grad():
-                feature_maps, proposals, confidences, pos_b_idxs = self.rpn(
-                    images, conf_thresh=conf_thresh, nms_thresh=nms_thresh)
-                
+                feature_maps, proposals, confidences, pos_b_idxs = (
+                    self.rpn(images, conf_thresh=conf_thresh))
+
                 conf_pred = []
                 proposals_list = []
                 for i in range(b_size):
                     cur_idxs = torch.where(pos_b_idxs == i)
-                    conf_pred.append(confidences[cur_idxs])
-                    proposals_list.append(proposals[cur_idxs])
+                    cur_confs = confidences[cur_idxs]
+                    cur_props = proposals[cur_idxs]
+                    nms_idxs = ops.nms(cur_props, cur_confs, nms_thresh)
+                    conf_pred.append(cur_confs[nms_idxs])
+                    proposals_list.append(cur_props[nms_idxs])
 
                 cls_scores = self.classifier(feature_maps, proposals_list)
                 cls_conf = self.softmax(cls_scores)
@@ -687,7 +680,8 @@ class RCNN_Detector(nn.Module):
                 cls_conf_list = []
                 idx = 0
                 for image_proposals in proposals_list:
-                    cls_conf_list.append(cls_conf[idx:len(image_proposals)])
+                    cls_conf_list.append(
+                        cls_conf[idx:idx + len(image_proposals)])
                     idx += len(image_proposals)
                 
                 return proposals_list, cls_conf_list
