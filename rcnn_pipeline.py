@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import torch
-import torchvision
 from torch.utils.data import DataLoader
 
 import rcnn_model
@@ -37,25 +36,13 @@ def main():
         annotation_path, img_dir, (img_width, img_height), name2index)
     dloader = DataLoader(dset, batch_size=2)
 
-    # Get backbone for RPN
-    resnet = torchvision.models.resnet50(
-        weights=torchvision.models.ResNet50_Weights.DEFAULT)
-    backbone = torch.nn.Sequential(*list(resnet.children())[:8])
-
-    # Use backbone to get it's output size
-    batch = next(iter(dloader))
-    images, gt_boxes, gt_cls = batch
-    backbone_out = backbone(images)
-
-    # Backbone output size
-    b, out_c, out_h, out_w = backbone_out.shape
-
     # Get the model
     model = rcnn_model.RCNN_Detector(
-        (img_height, img_width), (out_h, out_w), out_c, n_cls, roi_size,
-        anc_scales, anc_ratios, pos_thresh, neg_thresh)
+        input_size=(img_height, img_width), n_cls=n_cls, roi_size=roi_size,
+        anc_scales=anc_scales, anc_ratios=anc_ratios,
+        pos_anc_thresh=pos_thresh, neg_anc_thresh=neg_thresh)
     
-    model.load_state_dict(torch.load('model_with_permute.pt'))
+    model.load_state_dict(torch.load('best_model.pt'))
     
     device = torch.device('cpu')
     model = model.to(device=device)

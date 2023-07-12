@@ -1,6 +1,7 @@
 """A module that contains RCNN model class."""
 
 from typing import Tuple, Iterable, Union, List
+from functools import partial
 
 import torch
 from torch import Tensor
@@ -17,14 +18,38 @@ from rcnn_utils import (
 class FeatureExtractor(nn.Module):
     """Feature extractor backbone."""
 
-    def __init__(self) -> None:
+    def __init__(self, model_name: str, input_size: Tuple[int, int]) -> None:
         super().__init__()
+
+        models = {
+            'resnet18': partial(
+                torchvision.models.resnet18,
+                weights=torchvision.models.ResNet18_Weights.DEFAULT),
+            'resnet34': partial(
+                torchvision.models.resnet34,
+                weights=torchvision.models.ResNet34_Weights.DEFAULT),
+            'resnet50': partial(
+                torchvision.models.resnet50,
+                weights=torchvision.models.ResNet50_Weights.DEFAULT),
+            'resnet101': partial(
+                torchvision.models.resnet101,
+                weights=torchvision.models.ResNet101_Weights.DEFAULT),
+            'resnet152': partial(
+                torchvision.models.resnet152,
+                weights=torchvision.models.ResNet152_Weights.DEFAULT),
+        }
+        if model_name not in models:
+            raise KeyError('Got model that is not supported.')
         
         # Get pretrained backbone
-        # TODO think about optional backbone replacing
-        resnet = torchvision.models.resnet50(
-            weights=torchvision.models.ResNet50_Weights.DEFAULT)
+        resnet = models[model_name]()
         self.backbone = torch.nn.Sequential(*list(resnet.children())[:8])
+
+        # Check out shape
+        input_placeholder = torch.rand(1, 3, *input_size)
+        _, self.out_c, self.out_h, self.out_w = (
+            self.backbone(input_placeholder).shape)
+
         # Unfreeze backbone
         for param in self.backbone.parameters():
             param.requires_grad = True
@@ -157,14 +182,15 @@ class RegionProposalNetwork(nn.Module):
     def __init__(
         self,
         input_size: Tuple[int, int],
-        out_size: Tuple[int, int],
-        out_channels: int,
+        backbone_model: str = 'resnet50',
         anc_scales: Iterable[float] = (2.0, 4.0, 6.0),
         anc_ratios: Iterable[float] = (0.5, 1.0, 1.5),
         pos_anc_thresh: float = 0.7,
         neg_anc_thresh: float = 0.3,
         w_conf: float = 1.0,
-        w_reg: float = 5.0
+        w_reg: float = 5.0,
+        proposal_module_hid_dim: int = 512,
+        proposals_module_p_dropout: float = 0.3
     ) -> None:
         """Initialize RPN.
 
@@ -172,10 +198,9 @@ class RegionProposalNetwork(nn.Module):
         ----------
         input_size : Tuple[int, int]
             Input images' size.
-        out_size : Tuple[int, int]
-            Expected size of backbone feature map.
-        out_channels : int
-            Expected number of backbone feature map channels.
+        backbone_model : str, optional
+            A name of a backbone model. A resnet family is supported.
+            By default it is equal `"resnet50"`.
         anc_scales : Iterable[float], optional
             Scale factors of anchor bounding boxes.
             By default is (2.0, 4.0, 6.0).
@@ -195,23 +220,31 @@ class RegionProposalNetwork(nn.Module):
             By default is 5.0.
         """
         super().__init__()
-        self.feature_extractor = FeatureExtractor()
+        self.feature_extractor = FeatureExtractor(backbone_model, input_size)
+        self.backbone_c = self.feature_extractor.out_c
+        self.backbone_h = self.feature_extractor.out_h
+        self.backbone_w = self.feature_extractor.out_w
         self.proposal_module = ProposalModule(
-            out_channels, len(anc_scales) * len(anc_ratios))
+            in_features=self.backbone_c,
+            hidden_dim=proposal_module_hid_dim,
+            n_anchors=len(anc_scales) * len(anc_ratios),
+            p_dropout=proposals_module_p_dropout)
         self.scores_sigmoid = nn.Sigmoid()
 
         self.pos_anc_thresh = pos_anc_thresh
         self.neg_anc_thresh = neg_anc_thresh
 
-        self.height_scale = input_size[0] // out_size[0]
-        self.width_scale = input_size[1] // out_size[1]
+        self.height_scale = input_size[0] // self.backbone_h
+        self.width_scale = input_size[1] // self.backbone_w
 
         self.w_conf = w_conf
         self.w_reg = w_reg
 
-        x_anc_pts, y_anc_pts = generate_anchors(out_size)
+        x_anc_pts, y_anc_pts = generate_anchors(
+            (self.backbone_h, self.backbone_w))
         anchor_grid = torch.nn.Parameter(generate_anchor_boxes(
-            x_anc_pts, y_anc_pts, anc_scales, anc_ratios, out_size))
+            x_anc_pts, y_anc_pts, anc_scales, anc_ratios,
+            (self.backbone_h, self.backbone_w)))
         self.register_buffer('anchor_grid', anchor_grid)
 
     def forward(
@@ -527,17 +560,18 @@ class RCNN_Detector(nn.Module):
     def __init__(
         self,
         input_size: Tuple[int, int],
-        backbone_out_size: Tuple[int, int],
-        backbone_out_channels: int,
         n_cls: int,
         roi_size: Tuple[int, int],
+        backbone_model: str = 'resnet50',
         anc_scales: Iterable[float] = (2, 4, 6),
         anc_ratios: Iterable[float] = (0.5, 1, 1.5),
         pos_anc_thresh: float = 0.7,
         neg_anc_thresh: float = 0.3,
-        w_conf_loss: float = 1,
-        w_reg_loss: float = 5,
+        w_conf_loss: float = 1.0,
+        w_reg_loss: float = 5.0,
+        proposal_module_hid_dim: int = 512,
         classifier_hid_dim: int = 512,
+        proposals_module_p_dropout: float = 0.3,
         classifier_p_dropout: float = 0.3
     ) -> None:
         """Initialize RCNN network.
@@ -546,14 +580,13 @@ class RCNN_Detector(nn.Module):
         ----------
         input_size : Tuple[int, int]
             A size of input images.
-        backbone_out_size : Tuple[int, int]
-            An expected backbone's output feature map size.
-        backbone_out_channels : int
-            An expected number of channels of backbone's output feature map.
         n_cls : int
             A number of classification classes.
         roi_size : Tuple[int, int]
             A size for RoI pulling.
+        backbone_model : str, optional
+            A name of a backbone model. A resnet family is supported.
+            By default it is equal `"resnet50"`.
         anc_scales : Iterable[float], optional
             Scale factors of anchor bounding boxes.
             By default is (2.0, 4.0, 6.0).
@@ -578,12 +611,15 @@ class RCNN_Detector(nn.Module):
         """
         super().__init__()
         self.rpn = RegionProposalNetwork(
-            input_size, backbone_out_size, backbone_out_channels, anc_scales,
-            anc_ratios, pos_anc_thresh, neg_anc_thresh, w_conf_loss, w_reg_loss
-        )
+            input_size=input_size, backbone_model=backbone_model,
+            anc_scales=anc_scales, anc_ratios=anc_ratios,
+            pos_anc_thresh=pos_anc_thresh, neg_anc_thresh=neg_anc_thresh,
+            w_conf=w_conf_loss, w_reg=w_reg_loss,
+            proposal_module_hid_dim=proposal_module_hid_dim,
+            proposals_module_p_dropout=proposals_module_p_dropout)
         self.classifier = ClassificationModule(
-            backbone_out_channels, n_cls, roi_size, classifier_hid_dim,
-            classifier_p_dropout)
+            out_channels=self.rpn.backbone_c, n_cls=n_cls, roi_size=roi_size,
+            hidden_dim=classifier_hid_dim, p_dropout=classifier_p_dropout)
         self.softmax = nn.Softmax(dim=1)
 
     def forward(
