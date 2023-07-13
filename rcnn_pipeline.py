@@ -25,7 +25,7 @@ def main():
     neg_thresh = 0.3
 
     # Anchors parameters
-    anc_scales = [2, 4, 6]
+    anc_scales = [2.0, 4.0, 6.0]
     anc_ratios = [0.5, 1, 1.5]
 
     # Roi size for classifier
