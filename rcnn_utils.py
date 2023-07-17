@@ -3,9 +3,9 @@
 
 from typing import Iterable, Tuple, Union, Dict, Optional, List
 
-import numpy as np
+from numpy.typing import ArrayLike
 import torch
-from torch import Tensor
+from torch import FloatTensor, IntTensor
 import torchvision
 import matplotlib.pyplot as plt
 from matplotlib import patches
@@ -13,8 +13,8 @@ from matplotlib import patches
 
 def draw_bounding_boxes(
     ax: plt.Axes,
-    bboxes: Tensor,
-    labels: Union[Tensor, List[int]] = None,
+    bboxes: FloatTensor,
+    labels: Union[IntTensor, List[int]] = None,
     index2name: Dict[int, str] = None,
     line_width: int = 2,
     color: str = 'y',
@@ -26,9 +26,9 @@ def draw_bounding_boxes(
     ----------
     ax : plt.Axes
         Axes with a sample image.
-    bboxes : Tensor
+    bboxes : FloatTensor
         A tensor with shape `[N_bboxes, 4]` that contains the bounding boxes.
-    labels : Union[Tensor, List[int]], optional
+    labels : Union[IntTensor, List[int]], optional
         Int tensor or list with length `N_bboxes` with labels corresponding
         to the bounding boxes.
     index2name : Dict[int, str], optional
@@ -65,7 +65,7 @@ def draw_bounding_boxes(
 
 def generate_anchors(
         map_size: Tuple[int, int]
-) -> Tuple[Tensor, Tensor]:
+) -> Tuple[FloatTensor, FloatTensor]:
     """Generate anchor points on a feature map.
 
     Anchor points located between feature map pixels.
@@ -77,7 +77,7 @@ def generate_anchors(
 
     Returns
     -------
-    Tuple[Tensor, Tensor]
+    Tuple[FloatTensor, FloatTensor]
         Tensors containing anchor points defined on feature map.
     """
     height, width = map_size
@@ -89,8 +89,8 @@ def generate_anchors(
 
 
 def show_anchors(
-    x_points: Union[Tensor, np.ndarray],
-    y_points: Union[Tensor, np.ndarray],
+    x_points: Union[FloatTensor, ArrayLike],
+    y_points: Union[FloatTensor, ArrayLike],
     ax: plt.Axes,
     special_point: Optional[Tuple[int, int]] = None
 ) -> plt.Axes:
@@ -98,9 +98,9 @@ def show_anchors(
 
     Parameters
     ----------
-    x_points : Union[Tensor, np.ndarray]
+    x_points : Union[FloatTensor, ArrayLike]
         X coordinates for anchor points.
-    y_points : Union[Tensor, np.ndarray]
+    y_points : Union[FloatTensor, ArrayLike]
         Y coordinates for anchor points.
     ax : plt.Axes
         Axes for showing.
@@ -123,12 +123,12 @@ def show_anchors(
 
 
 def generate_anchor_boxes(
-    x_anchors: Tensor,
-    y_anchors: Tensor,
-    anc_scales: Union[Iterable[float], Tensor],
-    anc_ratios: Union[Iterable[float], Tensor],
+    x_anchors: FloatTensor,
+    y_anchors: FloatTensor,
+    anc_scales: Union[Iterable[float], FloatTensor],
+    anc_ratios: Union[Iterable[float], FloatTensor],
     map_size: Tuple[int, int]
-) -> Tensor:
+) -> FloatTensor:
     """Create anchor boxes.
 
     Generate tensor with shape `[Hmap, Wmap, n_anchor_boxes, 4]`
@@ -148,20 +148,20 @@ def generate_anchor_boxes(
 
     Parameters
     ----------
-    x_anchors : Tensor
+    x_anchors : FloatTensor
         X coordinates of the anchors.
-    y_anchors : Tensor
+    y_anchors : FloatTensor
         Y coordinates of the anchors.
-    anc_scales : Union[Iterable[float], Tensor]
+    anc_scales : Union[Iterable[float], FloatTensor]
         The scales for boxes.
-    anc_ratios : Union[Iterable[float], Tensor]
+    anc_ratios : Union[Iterable[float], FloatTensor]
         The ratios for boxes.
     map_size : Tuple[int, int]
         A size of the map.
 
     Returns
     -------
-    Tensor
+    FloatTensor
         The generated bounding boxes with shape
         `[n_scales * n_ratios, h_n_anc, w_n_anc, 4]`.
     """
@@ -206,16 +206,16 @@ def generate_anchor_boxes(
 
 
 def project_bboxes(
-    bboxes: Tensor,
+    bboxes: FloatTensor,
     width_scale_factor: float,
     height_scale_factor: float,
     mode='a2p'
-) -> Tensor:
+) -> FloatTensor:
     """Project bounding boxes to a defined scaled space.
 
     Parameters
     ----------
-    bboxes : Tensor
+    bboxes : FloatTensor
         A tensor with shape `[n_bboxes, 4]` that contains bounding boxes.
     width_scale_factor : float
         A scale factor across a width.
@@ -228,7 +228,7 @@ def project_bboxes(
 
     Returns
     -------
-    Tensor
+    FloatTensor
         The projected bounding boxes with shape `[n_bboxes, 4]`.
 
     Raises
@@ -257,22 +257,22 @@ def project_bboxes(
 
 
 def anc_gt_iou(
-    anc_boxes_grid: Tensor, gt_boxes: Tensor
-) -> Tensor:
+    anc_boxes_grid: FloatTensor, gt_boxes: FloatTensor
+) -> FloatTensor:
     """
     Calculate intersection over union between anchor boxes and batch of
     ground truth boxes.
 
     Parameters
     ----------
-    anc_boxes_grid : Tensor
+    anc_boxes_grid : FloatTensor
         A grid of the anchor boxes with a shape `[n_boxes, 4]`.
-    gt_boxes : Tensor
+    gt_boxes : FloatTensor
         The ground truth boxes with a shape `[B, m_boxes, 4]`.
 
     Returns
     -------
-    Tensor
+    FloatTensor
         IoU tensor with shape `[B, n_boxes, m_boxes]`.
 
     Raises
@@ -303,9 +303,9 @@ def anc_gt_iou(
 
 
 def calculate_gt_offsets(
-    positive_anchors: Tensor,
-    gt_bboxes: Tensor
-) -> Tensor:
+    positive_anchors: FloatTensor,
+    gt_bboxes: FloatTensor
+) -> FloatTensor:
     """Calculate offsets between selected anchors and corresponding gt bboxes.
 
     Offsets are:
@@ -316,14 +316,14 @@ def calculate_gt_offsets(
 
     Parameters
     ----------
-    positive_anchors : Tensor
+    positive_anchors : FloatTensor
         The positive anchors in xyxy system with shape `[n_anc, 4]`.
-    gt_bboxes : Tensor
+    gt_bboxes : FloatTensor
         Ground truth bounding boxes in xyxy system with shape `[n_anc, 4]`.
 
     Returns
     -------
-    Tensor
+    FloatTensor
         The offsets with shape `[n_pos_anc, 4]`.
     """
     positive_anchors = torchvision.ops.box_convert(
@@ -344,12 +344,13 @@ def calculate_gt_offsets(
 
 
 def get_required_anchors(
-    anc_boxes_all: Tensor,
-    gt_boxes: Tensor,
-    gt_classes: Tensor,
+    anc_boxes_all: FloatTensor,
+    gt_boxes: FloatTensor,
+    gt_classes: FloatTensor,
     pos_thresh: float = 0.7,
     neg_thresh: float = 0.2
-) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+) -> Tuple[IntTensor, IntTensor, IntTensor, FloatTensor, FloatTensor,
+           FloatTensor, FloatTensor, FloatTensor]:
     """Get required anchors from all available ones.
 
     Get indices for positive anchor boxes, and the same number of indices for
@@ -366,11 +367,11 @@ def get_required_anchors(
 
     Parameters
     ----------
-    anc_boxes_all : Tensor
+    anc_boxes_all : FloatTensor
         All anchor boxes with shape `[b, n_anc_per_img, 4]`.
-    gt_boxes : Tensor
+    gt_boxes : FloatTensor
         Ground truth bounding boxes with shape `[b, n_max_obj, 4]`.
-    gt_classes : Tensor
+    gt_classes : FloatTensor
         Classes corresponding the given ground truth boxes
         with shape `[b, n_max_obj]`.
     pos_thresh : float, optional
@@ -380,7 +381,8 @@ def get_required_anchors(
 
     Returns
     -------
-    Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]
+    Tuple[IntTensor, IntTensor, IntTensor, FloatTensor, FloatTensor,
+          FloatTensor, FloatTensor, FloatTensor]
         Tuple consists of described above `pos_anc_idxs`, `neg_anc_idxs`,
         `pos_b_idxs`, `pos_ancs`, `neg_ancs`, `pos_anc_conf_scores`,
         `gt_class_pos` and `gt_offsets`.
