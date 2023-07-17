@@ -59,7 +59,7 @@ def main():
     model.eval()
     for batch in dloader:
         images, gt_boxes, gt_cls = batch
-        proposals, cls_scores = model(
+        proposals, cls_scores = model.inference(
             images, conf_thresh=0.80, nms_thresh=0.05)
         break
 
