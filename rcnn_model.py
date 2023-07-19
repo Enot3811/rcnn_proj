@@ -547,6 +547,14 @@ class ClassificationModule(nn.Module):
             Class scores with shape `(n_pos_anc,)'
             and additional class loss with shape `(n_cls,)`
         """
+        # Check is there even one proposal
+        props_mask = torch.tensor(
+            [props.shape[0] == 0 for props in predicted_proposals])
+        if props_mask.all():
+            b = len(predicted_proposals)
+            device = props_mask[0].device
+            return torch.FloatTensor(size=(0, b), device=device), 0.0
+
         x = ops.roi_pool(feature_maps, predicted_proposals, self.roi_size)
         x = self.avg_pool(x).flatten(start_dim=1)
         x = self.fc(x)
