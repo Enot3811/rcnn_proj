@@ -13,7 +13,7 @@ from matplotlib import patches
 
 def draw_bounding_boxes(
     ax: plt.Axes,
-    bboxes: FloatTensor,
+    bboxes: Union[List[List[float]], FloatTensor],
     labels: Union[IntTensor, List[int]] = None,
     index2name: Dict[int, str] = None,
     line_width: int = 2,
@@ -26,8 +26,9 @@ def draw_bounding_boxes(
     ----------
     ax : plt.Axes
         Axes with a sample image.
-    bboxes : FloatTensor
+    bboxes : Union[List[List[float]], FloatTensor]
         A tensor with shape `[N_bboxes, 4]` that contains the bounding boxes.
+        It can contain pad `-1` values.
     labels : Union[IntTensor, List[int]], optional
         Int tensor or list with length `N_bboxes` with labels corresponding
         to the bounding boxes.
@@ -43,15 +44,32 @@ def draw_bounding_boxes(
     plt.Axes
         The given axis with added bounding boxes.
     """
+    # Convert bboxes tensor to list. Discard pad
+    if isinstance(bboxes, FloatTensor):
+        bboxes = [
+            bboxes[i].tolist()
+            for i in range(bboxes.shape[0])
+            if bboxes[i][0] > 0.0]
+    elif not isinstance(bboxes, list):
+        raise TypeError(
+            'bboxes has wrong type. It must be list or FloatTensor.')
+
+    # Prepare labels
     if labels is None:
-        labels = torch.tensor([-1] * len(bboxes))
-    if isinstance(labels, list):
-        labels = torch.tensor(labels, dtype=torch.int16)
+        labels = [-1 for _ in range(len(bboxes))]
+    elif isinstance(labels, IntTensor):
+        labels = [labels[i].item() for i in range(len(bboxes))]
+    elif isinstance(labels, list):
+        labels = list(map(int, labels))
+    else:
+        raise TypeError(
+            'labels has wrong type. It must be list or IntTensor.')
+
+    # Draw bounding boxes and its labels
     for bbox, label in zip(bboxes, labels):
-        label = label.item()
         if index2name is not None:
             label = index2name[label]
-        xmin, ymin, xmax, ymax = bbox.numpy()
+        xmin, ymin, xmax, ymax = bbox
         rect = patches.Rectangle(
             (xmin, ymin), xmax - xmin, ymax - ymin, linewidth=line_width,
             edgecolor=color, facecolor='none')
@@ -64,7 +82,7 @@ def draw_bounding_boxes(
 
 
 def generate_anchors(
-        map_size: Tuple[int, int]
+    map_size: Tuple[int, int]
 ) -> Tuple[FloatTensor, FloatTensor]:
     """Generate anchor points on a feature map.
 
