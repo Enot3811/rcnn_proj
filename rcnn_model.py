@@ -358,6 +358,8 @@ class RegionProposalNetwork(nn.Module):
         pos_ancs = batch_anc_grid.flatten(end_dim=-2)[pos_anc_idxs]
 
         proposals = self._generate_proposals(pos_ancs, pos_offsets)
+        proposals = project_bboxes(
+            proposals, self.width_scale, self.height_scale, mode='a2p')
 
         return feature_maps, proposals, pos_confs, pos_b_idxs
             
