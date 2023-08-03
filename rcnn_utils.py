@@ -5,7 +5,7 @@ from typing import Iterable, Tuple, Union, Dict, Optional, List
 
 from numpy.typing import ArrayLike
 import torch
-from torch import FloatTensor, IntTensor
+from torch import FloatTensor, IntTensor, Tensor
 import torchvision
 import matplotlib.pyplot as plt
 from matplotlib import patches
@@ -45,7 +45,7 @@ def draw_bounding_boxes(
         The given axis with added bounding boxes.
     """
     # Convert bboxes tensor to list. Discard pad
-    if isinstance(bboxes, FloatTensor):
+    if isinstance(bboxes, Tensor) and bboxes.is_floating_point():
         bboxes = [
             bboxes[i].tolist()
             for i in range(bboxes.shape[0])
@@ -57,7 +57,7 @@ def draw_bounding_boxes(
     # Prepare labels
     if labels is None:
         labels = [-1 for _ in range(len(bboxes))]
-    elif isinstance(labels, IntTensor):
+    elif isinstance(labels, Tensor) and not labels.is_floating_point():
         labels = [labels[i].item() for i in range(len(bboxes))]
     elif isinstance(labels, list):
         labels = list(map(int, labels))
