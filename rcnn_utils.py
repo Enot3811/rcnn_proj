@@ -9,6 +9,7 @@ from torch import FloatTensor, IntTensor, Tensor
 import torchvision
 import matplotlib.pyplot as plt
 from matplotlib import patches
+import cv2
 
 
 def draw_bounding_boxes(
@@ -79,6 +80,79 @@ def draw_bounding_boxes(
             ax.text(xmin + 5, ymin + 20, label,
                     bbox=dict(facecolor='yellow', alpha=0.5))
     return ax
+
+
+def draw_bounding_boxes_cv2(
+    image: ArrayLike,
+    bboxes: Union[List[List[float]], FloatTensor],
+    labels: Union[IntTensor, List[int]] = None,
+    index2name: Dict[int, str] = None,
+    line_width: int = 2,
+    color: Tuple[int, int, int] = (255, 255, 0),
+) -> ArrayLike:
+    """Show bounding boxes and corresponding labels on a given image.
+
+    Parameters
+    ----------
+    image : ArrayLike
+        The given image array.
+    bboxes : Union[List[List[float]], FloatTensor]
+        A tensor with shape `[N_bboxes, 4]` that contains the bounding boxes.
+        It can contain pad `-1` values.
+    labels : Union[IntTensor, List[int]], optional
+        Int tensor or list with length `N_bboxes` with labels corresponding
+        to the bounding boxes.
+    index2name : Dict[int, str], optional
+        A converter dict from int labels to names.
+    line_width : int, optional
+        A width of the bounding boxes' lines, By default is 2.
+    color : str, optional
+        A color of the bounding boxes' lines. By default is "y".
+
+    Returns
+    -------
+    ArrayLike
+        The given image with showed bounding boxes.
+    """
+    image = image.copy()
+    # Convert bboxes tensor to list. Discard pad
+    if isinstance(bboxes, Tensor) and bboxes.is_floating_point():
+        bboxes = [
+            bboxes[i].tolist()
+            for i in range(bboxes.shape[0])
+            if bboxes[i][0] > 0.0]
+    elif not isinstance(bboxes, list):
+        raise TypeError(
+            'bboxes has wrong type. It must be list or FloatTensor.')
+
+    # Prepare labels
+    if labels is None:
+        labels = [-1 for _ in range(len(bboxes))]
+    elif isinstance(labels, Tensor) and not labels.is_floating_point():
+        labels = [labels[i].item() for i in range(len(bboxes))]
+    elif isinstance(labels, list):
+        labels = list(map(int, labels))
+    else:
+        raise TypeError(
+            'labels has wrong type. It must be list or IntTensor.')
+
+    # Draw bounding boxes and its labels
+    for bbox, label in zip(bboxes, labels):
+        if index2name is not None:
+            label = index2name[label]
+        xmin, ymin, xmax, ymax = bbox
+        xmin = int(xmin)
+        ymin = int(ymin)
+        xmax = int(xmax)
+        ymax = int(ymax)
+
+        image = cv2.rectangle(
+            image, (xmin, ymin), (xmax, ymax), color, line_width)
+        
+        if label != 'pad' and label != -1:
+            image = cv2.putText(image, label, (xmin, ymin - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+    return image
 
 
 def generate_anchors(
