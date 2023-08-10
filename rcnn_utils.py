@@ -20,8 +20,7 @@ def draw_bounding_boxes(
     line_width: int = 2,
     color: str = 'y',
 ) -> plt.Axes:
-    """
-    Show bounding boxes and corresponding labels on a given Axes.
+    """Show bounding boxes and corresponding labels on a given Axes.
 
     Parameters
     ----------
@@ -84,8 +83,8 @@ def draw_bounding_boxes(
 
 def draw_bounding_boxes_cv2(
     image: ArrayLike,
-    bboxes: Union[List[List[float]], FloatTensor],
-    labels: Union[IntTensor, List[int]] = None,
+    bboxes: Union[List[List[Union[int, float]]], Tensor],
+    labels: Union[IntTensor, List[Union[int, str]]] = None,
     index2name: Dict[int, str] = None,
     line_width: int = 2,
     color: Tuple[int, int, int] = (255, 255, 0),
@@ -96,10 +95,10 @@ def draw_bounding_boxes_cv2(
     ----------
     image : ArrayLike
         The given image array.
-    bboxes : Union[List[List[float]], FloatTensor]
+    bboxes : Union[List[List[Union[int, float]]], Tensor]
         A tensor with shape `[N_bboxes, 4]` that contains the bounding boxes.
         It can contain pad `-1` values.
-    labels : Union[IntTensor, List[int]], optional
+    labels : Union[IntTensor, List[Union[int, str]]], optional
         Int tensor or list with length `N_bboxes` with labels corresponding
         to the bounding boxes.
     index2name : Dict[int, str], optional
@@ -116,7 +115,7 @@ def draw_bounding_boxes_cv2(
     """
     image = image.copy()
     # Convert bboxes tensor to list. Discard pad
-    if isinstance(bboxes, Tensor) and bboxes.is_floating_point():
+    if isinstance(bboxes, Tensor):
         bboxes = [
             bboxes[i].tolist()
             for i in range(bboxes.shape[0])
@@ -127,19 +126,28 @@ def draw_bounding_boxes_cv2(
 
     # Prepare labels
     if labels is None:
-        labels = [-1 for _ in range(len(bboxes))]
-    elif isinstance(labels, Tensor) and not labels.is_floating_point():
-        labels = [labels[i].item() for i in range(len(bboxes))]
+        if index2name is None:
+            labels = [-1 for _ in range(len(bboxes))]
+        else:
+            labels = [index2name[-1] for _ in range(len(bboxes))]
+    elif isinstance(labels, Tensor):
+        if labels.is_floating_point():
+            raise TypeError('Labels must be list[int] or IntTensor.')
+        
+        if index2name is None:
+            labels = [labels[i].item() for i in range(len(bboxes))]
+        else:
+            labels = [index2name[labels[i].item()] for i in range(len(bboxes))]
     elif isinstance(labels, list):
-        labels = list(map(int, labels))
+        if index2name is None:
+            labels = list(map(int, labels))
+        else:
+            labels = list(map(lambda label: index2name[int(label)], labels))
     else:
-        raise TypeError(
-            'labels has wrong type. It must be list or IntTensor.')
+        raise TypeError('Labels have wrong type.')
 
     # Draw bounding boxes and its labels
     for bbox, label in zip(bboxes, labels):
-        if index2name is not None:
-            label = index2name[label]
         xmin, ymin, xmax, ymax = bbox
         xmin = int(xmin)
         ymin = int(ymin)
