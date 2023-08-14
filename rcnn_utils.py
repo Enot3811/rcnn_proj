@@ -3,7 +3,7 @@
 
 from typing import Iterable, Tuple, Union, Dict, Optional, List
 
-from numpy.typing import ArrayLike
+from numpy.typing import NDArray
 import torch
 from torch import FloatTensor, IntTensor, Tensor
 import torchvision
@@ -82,18 +82,18 @@ def draw_bounding_boxes(
 
 
 def draw_bounding_boxes_cv2(
-    image: ArrayLike,
+    image: NDArray,
     bboxes: Union[List[List[Union[int, float]]], Tensor],
     labels: Union[IntTensor, List[Union[int, str]]] = None,
     index2name: Dict[int, str] = None,
     line_width: int = 2,
     color: Tuple[int, int, int] = (255, 255, 0),
-) -> ArrayLike:
+) -> NDArray:
     """Show bounding boxes and corresponding labels on a given image.
 
     Parameters
     ----------
-    image : ArrayLike
+    image : NDArray
         The given image array.
     bboxes : Union[List[List[Union[int, float]]], Tensor]
         A tensor with shape `[N_bboxes, 4]` that contains the bounding boxes.
@@ -110,7 +110,7 @@ def draw_bounding_boxes_cv2(
 
     Returns
     -------
-    ArrayLike
+    NDArray
         The given image with showed bounding boxes.
     """
     image = image.copy()
@@ -189,8 +189,8 @@ def generate_anchors(
 
 
 def show_anchors(
-    x_points: Union[FloatTensor, ArrayLike],
-    y_points: Union[FloatTensor, ArrayLike],
+    x_points: Union[FloatTensor, NDArray],
+    y_points: Union[FloatTensor, NDArray],
     ax: plt.Axes,
     special_point: Optional[Tuple[int, int]] = None
 ) -> plt.Axes:
@@ -198,9 +198,9 @@ def show_anchors(
 
     Parameters
     ----------
-    x_points : Union[FloatTensor, ArrayLike]
+    x_points : Union[FloatTensor, NDArray]
         X coordinates for anchor points.
-    y_points : Union[FloatTensor, ArrayLike]
+    y_points : Union[FloatTensor, NDArray]
         Y coordinates for anchor points.
     ax : plt.Axes
         Axes for showing.
