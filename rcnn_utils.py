@@ -87,7 +87,7 @@ def draw_bounding_boxes_cv2(
     labels: Union[IntTensor, List[Union[int, str]]] = None,
     index2name: Dict[int, str] = None,
     line_width: int = 2,
-    color: Tuple[int, int, int] = (255, 255, 0),
+    color: Tuple[int, int, int] = (255, 128, 0),
 ) -> NDArray:
     """Show bounding boxes and corresponding labels on a given image.
 
@@ -140,7 +140,7 @@ def draw_bounding_boxes_cv2(
             labels = [index2name[labels[i].item()] for i in range(len(bboxes))]
     elif isinstance(labels, list):
         if index2name is None:
-            labels = list(map(int, labels))
+            labels = list(map(str, labels))
         else:
             labels = list(map(lambda label: index2name[int(label)], labels))
     else:
